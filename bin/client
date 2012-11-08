@@ -1,0 +1,12 @@
+#!/usr/bin/env python
+import sys
+import os
+
+if __name__ == "__main__":
+    root = os.path.dirname(os.path.dirname(sys.argv[0]))
+
+    if os.path.isdir(os.path.join(root, "tn")):
+        sys.path.insert(0, root)
+
+    from tn.urwidclient import client_main
+    sys.exit(client_main(sys.argv[1:]))
