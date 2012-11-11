@@ -1,90 +1,90 @@
 -- vim: filetype=lua
 
-graphics = require('graphics')
-utils = require('utils')
-scene = require('scene')
-e = require('entities')
+require "camera"
+
+utils = require "utils"
+mouse = require "mouse"
+graphics = require "graphics"
 
 images = {}
-scenes = {}
-
-
-scenes["scene1"] = scene.Scene.create()
-scenes["scene1"]:add_entity("node1:node3", e.Connection.create("node1", "node3"), -10)
-scenes["scene1"]:add_entity("node2:node3", e.Connection.create("node2", "node3"), -10)
-scenes["scene1"]:add_entity("node3:node4", e.Connection.create("node3", "node4"), -10)
-scenes["scene1"]:add_entity("node1", e.Node.create(500, 300, 10))
-scenes["scene1"]:add_entity("node2", e.Node.create(300, 30, 10))
-scenes["scene1"]:add_entity("node3", e.Node.create(100, 100, 10))
-scenes["scene1"]:add_entity("node4", e.Node.create(400, 400, 10))
-
-current_scene = "scene1"
-drag = false
-drag_x = nil
-drag_y = nil
-
-translate_x = 0
-translate_y = 0
+scene_table = {}
+scene_current = nil
 
 zoomlevels = {
-    0.25,
-    0.5,
-    1.0,
-    2.0,
-    3.0,
     4.0,
-    5.0,
-    6.0,
-    7.0,
-    8.0,
+    3.0,
+    2.0,
+    1.0,
+    0.5,
+    0.25,
+    0.125,
 }
 
-zl = 3
+Z = 4
 
-function love.mousepressed(mousex, mousey, button)
-    if button == 'm' then
-        drag = true
-        drag_x, drag_y = love.mouse.getPosition()
-    end
+drag_mouse_x = nil
+drag_mouse_y = nil
+
+function love.mousepressed(mouse_x, mouse_y, button)
+    mouse:updateState(button, 'pressed')
 end
 
-function love.mousereleased(mousex, mousey, button)
-    local screen_height = love.graphics.getHeight()
+function love.mousereleased(mouse_x, mouse_y, button)
+    mouse:updateState(button, 'released')
+end
 
-    if button == 'm' then
-        drag = false
-    elseif button == 'wu' then
-        if zl < #zoomlevels then zl = zl + 1 end
-    elseif button == 'wd' then
-        if zl > 1 then zl = zl - 1 end
-    end
-
-    if utils.point_in_rect(mousex, mousey, 10, screen_height - 140, 20, 100) then
-        print("Clicked CPU BAR")
-    end
+function love.keyreleased(key)
+   if key == "escape" then
+      love.event.push("quit")
+   end
 end
 
 function love.load()
+    scene_table["nodescene"] = require "scenes/nodescene"
+
+    scene_current = scene_table["nodescene"]
+
     images["cpu"] = love.graphics.newImage("graphics/cpu40x40.png")
     love.graphics.setColorMode("replace")
+    drag_mouse_x, drag_mouse_y = love.mouse.getPosition()
+end
+
+function love.update(ds)
+    mouse:updatePosition(love.mouse.getPosition())
+
+    if mouse:isDirty() then
+        if mouse:isState('m', 'pressed') then
+            local current_x, current_y = mouse:getPosition()
+            local move_x = drag_mouse_x - current_x
+            local move_y = drag_mouse_y - current_y
+            camera:move(move_x, move_y)
+            drag_mouse_x, drag_mouse_y = current_x, current_y
+        else
+            drag_mouse_x, drag_mouse_y = mouse:getPosition()
+        end
+    end
+
+    if scene_current ~= nil then
+        scene_current:update(ds)
+    end
 end
 
 function love.draw()
-    love.graphics.print("Current FPS: " .. tostring(love.timer.getFPS( )), 10, 10)
+    love.graphics.print("Current FPS: " .. tostring(love.timer.getFPS()), 10, 10)
+    love.graphics.print("Z: " .. tostring(Z), 10, 30)
 
-    if drag then
-        local current_x, current_y = love.mouse.getPosition()
-        translate_x = translate_x + (drag_x - current_x) / zoomlevels[zl]
-        translate_y = translate_y + (drag_y - current_y) / zoomlevels[zl]
-        drag_x = current_x
-        drag_y = current_y
+    graphics.print_states(700, 10, mouse)
+
+    if scene_current == nil then
+        love.graphics.print("NO SCENE", 10, 50)
+        return
     end
 
-    scenes[current_scene]:draw_foreground()
+    scene_current:draw_foreground()
 
-    love.graphics.translate(400, 400)
-    love.graphics.scale(zoomlevels[zl], zoomlevels[zl])
-    love.graphics.translate(translate_x, translate_y)
+    camera:set()
+    scene_current:draw()
+    camera:unset()
 
-    scenes[current_scene]:draw(translate_x, translate_y, zoomlevels[zl])
+    mouse:unset()
 end

@@ -2,4 +2,4 @@
 
 ROOT=$(dirname $(dirname $0))
 
-exec /usr/games/bin/love $ROOT/client.love
+exec /usr/bin/love $ROOT/client.love

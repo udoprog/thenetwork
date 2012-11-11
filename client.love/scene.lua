@@ -1,30 +1,48 @@
-module(..., package.seeall)
-
 Scene = {}
 Scene.__index = Scene
 
-function Scene.create()
+function Scene.new()
     local scene = {}
     setmetatable(scene, Scene)
-    scene.entities = {}
-    scene.sorted = {}
+    scene._entities = {}
+    scene._sorted = {}
     return scene
 end
 
-function Scene:draw(tx, ty, zl)
-    local mousex, mousey = love.mouse.getPosition()
+function Scene:clear()
+    self._entities = {}
+    self._sorted = {}
+end
 
-    for i=1,# self.sorted do
-        zindex, entity = unpack(self.sorted[i])
-        entity:check(tx, ty, zl, self, mousex, mousey)
+function Scene:update(ds)
+    if mouse:isDirty() then
+        -- If a mouse state has already been checked.
+        local stateChecked = true
+
+        for i=#self._sorted, 1, -1 do
+            zindex, id, entity = unpack(self._sorted[i])
+
+            if entity:checkPosition(self, mouse) and stateChecked then
+                entity:checkMouseState(self, mouse)
+                stateChecked = false
+            end
+        end
+
+        if stateChecked and mouse:isStateDirty() then
+            print("No one caught the Dirty State")
+        end
+    end
+end
+
+function Scene:draw()
+    for i=1,#self._sorted do
+        zindex, id, entity = unpack(self._sorted[i])
         entity:draw(self)
+        entity:unset()
     end
 end
 
 function Scene:draw_foreground()
-    local screen_height = love.graphics.getHeight()
-    graphics.fill_bar(10, -40, 10, 5, 20, 10, 2)
-    love.graphics.draw(images["cpu"], 0, screen_height - 40)
 end
 
 function compare_entity(a, b)
@@ -35,22 +53,22 @@ end
 
 function Scene:add_entity(id, entity, zindex)
     if zindex == nil then zindex = 0 end
-    table.insert(self.sorted, {zindex, entity})
-    self.entities[id] = {#self.sorted, entity}
-    table.sort(self.sorted, compare_entity)
+    table.insert(self._sorted, {zindex, id, entity})
+    self._entities[id] = {#self._sorted, entity}
+    table.sort(self._sorted, compare_entity)
 end
 
 function Scene:remove_entity(id)
-    record = self.entities[id]
+    record = self._entities[id]
     if record == nil then return nil end
     index, entity = unpack(record)
-    self.entities[id] = nil
-    table.remove(self.sorted, index)
+    self._entities[id] = nil
+    table.remove(self._sorted, index)
     return entity
 end
 
 function Scene:get_entity(id)
-    record = self.entities[id]
+    record = self._entities[id]
     if record == nil then return nil end
     _, entity = unpack(record)
     return entity
