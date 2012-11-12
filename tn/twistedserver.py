@@ -98,6 +98,9 @@ class ClientProtocol(basic.LineReceiver):
         except self.Error as e:
             self.sendError(message_id, str(e))
 
+    def connectionMade(self):
+        self.sendMessage("hello", {})
+
 
 class ClientProtocolFactory(protocol.Factory):
     protocol = ClientProtocol
