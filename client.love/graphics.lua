@@ -59,7 +59,7 @@ end
 function M.print_states(x, y, mouse)
     row = y + 10
 
-    love.graphics.print("= STATES =", x, row)
+    love.graphics.print("STATES: ", x, row)
     row = row + 20
 
     for key, value in pairs(mouse._states) do
@@ -67,7 +67,7 @@ function M.print_states(x, y, mouse)
         row = row + 20
     end
 
-    love.graphics.print("= CHANGES =", x, row)
+    love.graphics.print("CHANGES: ", x, row)
     row = row + 20
 
     for key, value in pairs(mouse._changes) do
@@ -82,15 +82,21 @@ function M.linearc(x, y, r, angle1, angle2, segments)
 
    local ang1 = angle1
    local ang2 = 0
-   
+
    while (ang1 < angle2) do
       ang2 = ang1 + step
 
       love.graphics.line(x + (math.cos(ang1) * r), y - (math.sin(ang1) * r),
                          x + (math.cos(ang2) * r), y - (math.sin(ang2) * r))
-      
+
       ang1 = ang2
    end
+end
+
+
+function M.debug()
+    love.graphics.print("Current FPS: " .. tostring(love.timer.getFPS()), 10, 10)
+    love.graphics.print("Zoom Level: " .. tostring(Z), 10, 30)
 end
 
 return M

@@ -3,6 +3,8 @@ local mouse = {}
 -- current position
 mouse._x = nil
 mouse._y = nil
+mouse._dx = 0
+mouse._dy = 0
 
 -- currently active states.
 mouse._states = {}
@@ -21,13 +23,24 @@ function mouse:updateState(button, state)
     end
 end
 
-function mouse:updatePosition(x, y)
+-- Update mouse position.
+function mouse:update(ds, x, y)
     if self._x == x and self._y == y then
+        self._dx, self._dy = 0, 0
         return
     end
 
-    self._dirtyPosition = true
+    if self._x ~= nil and self._y ~= nil then
+        self._dx, self._dy = self._x - x, self._y - y
+    end
+
     self._x, self._y = x, y
+
+    self._dirtyPosition = true
+end
+
+function mouse:getMovement()
+    return self._dx, self._dy
 end
 
 function mouse:getPosition()

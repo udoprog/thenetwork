@@ -1,12 +1,40 @@
+local mouse = require "mouse"
+local camera = require "camera"
+
 Scene = {}
 Scene.__index = Scene
 
 function Scene.new()
     local scene = {}
     setmetatable(scene, Scene)
+
     scene._entities = {}
     scene._sorted = {}
+    scene._movable = true
+
     return scene
+end
+
+-- Override to draw a foreground
+-- Foregrounds are drawn before camera transformations are applied.
+function Scene:draw_foreground() end
+
+-- Override to implement load functionality.
+function Scene:load() end
+
+-- Override to implement unload functionality.
+function Scene:unload() end
+
+function Scene:isMovable() return self._movable end
+function Scene:setMovable(value) self._movable = movable end
+
+-- Draw entities in sorted order according to Z-index.
+function Scene:draw_scene()
+    for i=1,#self._sorted do
+        zindex, id, entity = unpack(self._sorted[i])
+        entity:draw(self)
+        entity:unset()
+    end
 end
 
 function Scene:clear()
@@ -34,25 +62,25 @@ function Scene:update(ds)
     end
 end
 
-function Scene:draw()
-    for i=1,#self._sorted do
-        zindex, id, entity = unpack(self._sorted[i])
-        entity:draw(self)
-        entity:unset()
-    end
-end
-
-function Scene:draw_foreground()
-end
-
 function compare_entity(a, b)
     za, _ = unpack(a)
     zb, _ = unpack(b)
     return za < zb
 end
 
+--
+-- Add an entity to this scene.
+--
+-- id - Unique id for this entity.
+-- entity - The entity object (see entity.lua)
+-- zindex - Z-Index used to distinguish in which order this entity is drawn.
+--          Sorted in numerical order from lowest to highest number.
+--
 function Scene:add_entity(id, entity, zindex)
-    if zindex == nil then zindex = 0 end
+    if zindex == nil then
+        zindex = 0
+    end
+
     table.insert(self._sorted, {zindex, id, entity})
     self._entities[id] = {#self._sorted, entity}
     table.sort(self._sorted, compare_entity)
