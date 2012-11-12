@@ -2,4 +2,31 @@
 
 ROOT=$(dirname $(dirname $0))
 
-exec /usr/bin/love $ROOT/client.love
+love[0]=/usr/bin/love
+love[1]=/usr/local/bin/love
+love[3]=/usr/games/bin/love
+gamepaths[0]=$PWD/client.love
+gamepaths[1]=$ROOT/client.love
+
+lovepath=""
+gamepath=""
+
+for p in ${love[@]}; do
+    [[ -x $p ]] && lovepath=$p && break
+done
+
+for p in ${gamepaths[@]}; do
+    [[ -d $p ]] && gamepath=$p && break
+done
+
+if [[ -z "$lovepath" ]]; then
+    echo "Could not find love: ${love[@]}"
+    exit 1
+fi
+
+if [[ ! -d $gamepath ]]; then
+    echo "Could not find game: ${gamepaths[@]}"
+    exit 1
+fi
+
+exec $lovepath $ROOT/client.love
