@@ -43,9 +43,7 @@ function scenemanager:draw()
 
     camera:set()
     current:draw_scene()
-
     camera:unset()
-    mouse:unset()
 end
 
 function scenemanager:unloadScene(name)

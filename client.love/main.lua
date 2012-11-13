@@ -27,6 +27,14 @@ Z = 4
 connected = false
 reconnect_timeout = 0
 
+function pinghandler()
+    print("GOT PING")
+end
+
+networkhandler = {
+    ping = pinghandler,
+}
+
 function love.mousepressed(mouse_x, mouse_y, button)
     mouse:updateState(button, 'pressed')
 end
@@ -57,8 +65,21 @@ end
 
 function love.update(ds)
     mouse:update(ds, love.mouse.getPosition())
-    scenemanager:update(ds)
-    network:update(ds)
+    message = network:update(ds)
+
+    if message then
+        handler = networkhandler[message.type]
+
+        if handler then
+            handler(message)
+        end
+    end
+
+    if not network:isConnected() then
+        return
+    else
+        scenemanager:update(ds)
+    end
 end
 
 function love.draw()
@@ -66,10 +87,11 @@ function love.draw()
         love.graphics.setColor(255, 255, 255)
         love.graphics.print("NOT CONNECTED", 10, 10)
         love.graphics.print("Reconnecting in " .. string.format("%.02f", network:getReconnectTimeout()), 10, 30)
-        return
+    else
+        graphics.debug()
+        graphics.print_states(10, 50, mouse)
+        scenemanager:draw()
     end
 
-    graphics.debug()
-    graphics.print_states(10, 50, mouse)
-    scenemanager:draw()
+    mouse:unset()
 end

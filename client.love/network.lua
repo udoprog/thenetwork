@@ -36,7 +36,6 @@ function M:receivejson()
     body, state = self._tcp:receive("*l")
 
     if state == nil then
-        print(body)
         jsonbody = json.decode(body)
         return true, jsonbody
     end
@@ -64,13 +63,15 @@ function M:update(ds)
 
     self._connected, body = self:receivejson()
 
-    if body ~= nil then
-        print("body:", body)
-    end
-
     if was_connected and not self._connected then
         self._reconnect_timeout = self._timeout
     end
+
+    if body ~= nil then
+        return body
+    end
+
+    return nil
 end
 
 

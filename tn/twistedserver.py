@@ -1,5 +1,6 @@
 from twisted.internet import protocol
 from twisted.internet import reactor
+from twisted.internet import task
 from twisted.protocols import basic
 from tn.game import setup_basic_network
 
@@ -42,21 +43,50 @@ def login_handler(protocol, message):
     print message
 
 
+def pongHandler(protocol, message):
+    protocol.pinger.pong()
+
+
+class ClientPinger(object):
+    def __init__(self, protocol, interval):
+        self.interval = interval
+        self.protocol = protocol
+        self.task = task.LoopingCall(self)
+        self.expectPong = False
+
+    def start(self):
+        self.task.start(self.interval)
+
+    def stop(self):
+        self.task.stop()
+
+    def pong(self):
+        self.expectPong = False
+
+    def __call__(self):
+        if self.expectPong:
+            print("Oops, slow client")
+            return
+
+        self.protocol.sendMessage("ping", {})
+        self.expectPong = True
+
+
 class ClientProtocol(basic.LineReceiver):
+    handlers = {
+        "clientcommand": client_commands,
+        "login": login_handler,
+        "pong": pongHandler,
+    }
+
+    def __init__(self):
+        self.pinger = ClientPinger(self, 10.0)
+
     # raise when you wish to report back an error.
     class Error(Exception):
         pass
 
-    handlers = {
-        "clientcommand": client_commands,
-        "login": login_handler,
-    }
-
     delimiter = '\n'
-
-    def list_routers(self):
-        for node in self.factory.network._nodes.values():
-            self.sendLine(node.name)
 
     def sendError(self, message_id, message):
         self.sendMessage("error", {
@@ -99,7 +129,11 @@ class ClientProtocol(basic.LineReceiver):
             self.sendError(message_id, str(e))
 
     def connectionMade(self):
+        self.pinger.start()
         self.sendMessage("hello", {})
+
+    def connectionLost(self, reason):
+        self.pinger.stop()
 
 
 class ClientProtocolFactory(protocol.Factory):
