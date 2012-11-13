@@ -3,11 +3,11 @@ local utils = require "utils"
 require "entity"
 
 
-Connection = utils.new_class(Entity)
+Connection = utils.newClass(Entity)
 
 
 function Connection.new(e1, e2)
-    local self = Entity.new()
+    local self = Entity.new(0, 0)
     setmetatable(self, Connection)
 
     self.e1 = e1

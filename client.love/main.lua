@@ -1,16 +1,13 @@
 -- vim: filetype=lua
 
-local camera = require "camera"
-
--- Global objects.
--- these are implicitly available in the entire application.
-local utils = require "utils"
 local mouse = require "mouse"
+local keyboard = require "keyboard"
 local graphics = require "graphics"
 local scenemanager = require "scenemanager"
+local eventqueue = require "eventqueue"
 local network = require "network"
-
-images = {}
+local networkmanager = require "networkmanager"
+local client = require "client"
 
 zoomlevels = {
     4.0,
@@ -24,17 +21,6 @@ zoomlevels = {
 
 Z = 4
 
-connected = false
-reconnect_timeout = 0
-
-function pinghandler()
-    print("GOT PING")
-end
-
-networkhandler = {
-    ping = pinghandler,
-}
-
 function love.mousepressed(mouse_x, mouse_y, button)
     mouse:updateState(button, 'pressed')
 end
@@ -43,54 +29,59 @@ function love.mousereleased(mouse_x, mouse_y, button)
     mouse:updateState(button, 'released')
 end
 
-function love.keyreleased(key)
-   if key == "escape" then
-      love.event.push("quit")
-   end
+function love.keypressed(key, unicode)
+    keyboard:updateState(key, 'pressed')
 end
 
-function onSceneUpdate(message)
-    print(message)
+function love.keyreleased(key, ...)
+    keyboard:updateState(key, 'released')
+
+    if key == "escape" then
+        love.event.push("quit")
+    end
 end
 
 function love.load()
     love.graphics.setColorMode("replace")
 
+    function onSceneUpdate(message)
+        print(message)
+    end
+
     scenemanager:loadScene("nodes", onSceneUpdate)
     scenemanager:loadScene("mainmenu", onSceneUpdate)
 
     scenemanager:setCurrent("mainmenu")
-    network:setup("localhost", 9876)
+    networkmanager:setup("localhost", 9876)
 end
 
 function love.update(ds)
     mouse:update(ds, love.mouse.getPosition())
-    message = network:update(ds)
 
-    if message then
-        handler = networkhandler[message.type]
+    eventqueue:update(ds)
+    networkmanager:update(ds)
 
-        if handler then
-            handler(message)
-        end
-    end
-
-    if not network:isConnected() then
-        return
-    else
+    if client:isEstablished() then
         scenemanager:update(ds)
     end
 end
 
 function love.draw()
-    if not network:isConnected() then
-        love.graphics.setColor(255, 255, 255)
-        love.graphics.print("NOT CONNECTED", 10, 10)
-        love.graphics.print("Reconnecting in " .. string.format("%.02f", network:getReconnectTimeout()), 10, 30)
-    else
+    love.graphics.print("CHAT", 10, 400)
+
+    for i=1,#client.chatLog do
+        local user, text = unpack(client.chatLog[i])
+        love.graphics.print(user .. ": " .. text, 10, 400 + i*30)
+    end
+
+    if client:isEstablished() then
         graphics.debug()
         graphics.print_states(10, 50, mouse)
         scenemanager:draw()
+    else
+        love.graphics.setColor(255, 255, 255)
+        love.graphics.print("NOT CONNECTED", 10, 10)
+        love.graphics.print("Reconnecting in " .. string.format("%.01f", network:getReconnectTimeout()), 10, 30)
     end
 
     mouse:unset()

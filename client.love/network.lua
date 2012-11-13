@@ -1,5 +1,6 @@
 require "socket"
 json = require "libraries/dkjson"
+utils = require "utils"
 
 local M = {}
 M._tcp = nil
@@ -8,6 +9,8 @@ M._timeout = 5.0
 M._connected = false
 M._host = nil
 M._port = nil
+M._sendBuffer = {}
+M._sendBufferIndex = 0
 
 
 function M:setup(host, port)
@@ -28,24 +31,72 @@ end
 --
 -- if connected is false, then a connection has to be re-established using
 -- connect.
-function M:receivejson()
+function M:receiveJson()
+    local status, body = self:receiveBlock()
+
+    if body ~= nil then
+        jsonBody = json.decode(body)
+        return status, jsonBody
+    end
+
+    return status, nil
+end
+
+-- Buffer a message for later sending.
+function M:sendJson(typeName, data)
+    if self._tcp == nil then
+        return false
+    end
+
+    body = {
+        id = utils.randomString(16),
+        type = typeName,
+        data = data,
+    }
+
+    jsonBody = json.encode(body)
+    table.insert(M._sendBuffer, jsonBody .. "\n")
+end
+
+
+function M:receiveBlock()
     if self._tcp == nil then
         return false, nil
     end
 
-    body, state = self._tcp:receive("*l")
+    local body, state = self._tcp:receive("*l")
 
     if state == nil then
-        jsonbody = json.decode(body)
-        return true, jsonbody
+        return true, body
     end
 
     if state == "closed" then
-        self._tcp = nil
         return false, nil
     end
 
     return true, nil
+end
+
+
+function M:sendBlock()
+    if #self._sendBuffer <= 0 then
+        return self._connected
+    end
+
+    local i, err = self._tcp:send(self._sendBuffer[1], self._sendBufferIndex)
+
+    if i == nil then
+        return false
+    end
+
+    if i == #self._sendBuffer[1] then
+        table.remove(self._sendBuffer, 1)
+        self._sendBufferIndex = 1
+    else
+        self._sendBufferIndex = i
+    end
+
+    return self._connected
 end
 
 
@@ -54,17 +105,23 @@ function M:update(ds)
         self._reconnect_timeout = self._reconnect_timeout - ds
 
         if self._reconnect_timeout <= 0 then
+            self._reconnect_timeout = 0
             print("Attempting to Reconnect")
             self:connect(self._host, self._port)
         end
     end
 
     local was_connected = self._connected
+    local body = nil
 
-    self._connected, body = self:receivejson()
+    self._connected, body = self:receiveJson()
 
     if was_connected and not self._connected then
         self._reconnect_timeout = self._timeout
+    end
+
+    if self._connected then
+        self._connected = self:sendBlock()
     end
 
     if body ~= nil then

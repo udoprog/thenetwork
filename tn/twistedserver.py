@@ -2,49 +2,17 @@ from twisted.internet import protocol
 from twisted.internet import reactor
 from twisted.internet import task
 from twisted.protocols import basic
+
 from tn.game import setup_basic_network
 
 
 import uuid
 import json
+import logging
+import time
 
 
-def client_list_command(protocol, message):
-    routers = list()
-
-    for router in protocol.factory.network.get_routers():
-        routers.append({
-            "name": router.name
-        })
-
-    protocol.sendMessage()
-
-
-client_command_handlers = {
-    "list": client_list_command
-}
-
-
-def client_commands(protocol, message):
-    command = message.get("command")
-
-    if command is None:
-        raise protocol.Error("Missing command")
-
-    client_command_handler = client_command_handlers.get(command)
-
-    if client_command_handler is None:
-        raise protocol.Error("No such command")
-
-    return client_command_handler(protocol, message)
-
-
-def login_handler(protocol, message):
-    print message
-
-
-def pongHandler(protocol, message):
-    protocol.pinger.pong()
+log = logging.getLogger(__name__)
 
 
 class ClientPinger(object):
@@ -53,6 +21,7 @@ class ClientPinger(object):
         self.protocol = protocol
         self.task = task.LoopingCall(self)
         self.expectPong = False
+        self.latency = None
 
     def start(self):
         self.task.start(self.interval)
@@ -60,27 +29,53 @@ class ClientPinger(object):
     def stop(self):
         self.task.stop()
 
-    def pong(self):
+    def pongHandler(self, message):
+        if "time" not in message:
+            raise protocol.Error("Expecting 'time'")
+
+        previous_time = message["time"]
+
+        latency = time.time() - previous_time
+
         self.expectPong = False
+        self.latency = latency
 
     def __call__(self):
         if self.expectPong:
-            print("Oops, slow client")
+            log.warn("Slow client")
             return
 
-        self.protocol.sendMessage("ping", {})
+        self.protocol.sendMessage("ping", {"time": time.time()})
         self.expectPong = True
 
 
 class ClientProtocol(basic.LineReceiver):
-    handlers = {
-        "clientcommand": client_commands,
-        "login": login_handler,
-        "pong": pongHandler,
-    }
-
-    def __init__(self):
+    def __init__(self, factory):
+        self.factory = factory
         self.pinger = ClientPinger(self, 10.0)
+
+        self.handlers = {
+            "login": self.clientLogin,
+            "pong": self.pinger.pongHandler,
+            "chat": self.clientChat,
+        }
+
+    def clientLogin(self, message):
+        print message
+
+    def clientChat(self, message):
+        if "text" not in message:
+            raise self.Error("Missing 'text'")
+
+        for client in self.factory.clients:
+            client.sendMessage("chat", message)
+
+    def serverChat(self, message):
+        for client in self.factory.clients:
+            client.sendMessage("serverchat", {"text": message})
+
+    def clientHello(self):
+        self.sendMessage("hello", {"version": 0})
 
     # raise when you wish to report back an error.
     class Error(Exception):
@@ -94,29 +89,38 @@ class ClientProtocol(basic.LineReceiver):
             "message": message,
         })
 
-    def sendMessage(self, message_type, body):
-        message = dict()
-        message["id"] = str(uuid.uuid4())
-        message["type"] = str(message_type)
-        message["data"] = body
-        self.sendLine(json.dumps(message))
+    def sendMessage(self, message_type, data):
+        body = dict()
+        body["id"] = str(uuid.uuid4())
+        body["type"] = str(message_type)
+        body["data"] = data
+        jsonbody = json.dumps(body)
 
-    def lineReceived(self, line):
+        log.info("Sending {0}: {1} bytes".format(message_type, len(jsonbody)))
+        self.sendLine(jsonbody)
+
+    def sendAll(self, message_type, body):
+        pass
+
+    def lineReceived(self, jsonbody):
         try:
-            message = json.loads(line)
+            body = json.loads(jsonbody)
         except:
             return self.sendError(None, "Message not a valid json object")
 
-        message_type = message.get("type", None)
-        message_id = message.get("id", None)
-        message_body = message.get("body", None)
+        message_type = body.get("type", None)
+        message_id = body.get("id", None)
+        message_data = body.get("data", None)
 
         if message_type is None:
             return self.sendError(None, "Message without type")
         if message_id is None:
             return self.sendError(None, "Message without id")
-        if message_body is None:
-            return self.sendError(None, "Message without body")
+        if message_data is None:
+            return self.sendError(None, "Message without data")
+
+        log.info("Receiving {0}: {1} bytes".format(message_type,
+                                                   len(jsonbody)))
 
         handler = self.handlers.get(message_type)
 
@@ -124,26 +128,41 @@ class ClientProtocol(basic.LineReceiver):
             return self.sendError(message_id, "Unknown message type")
 
         try:
-            handler(self, message_body)
+            handler(message_data)
         except self.Error as e:
             self.sendError(message_id, str(e))
 
     def connectionMade(self):
         self.pinger.start()
-        self.sendMessage("hello", {})
+        self.clientHello()
+        self.serverChat("Hello Lowly Minions")
 
     def connectionLost(self, reason):
         self.pinger.stop()
+        self.factory.removeClient(self)
 
 
 class ClientProtocolFactory(protocol.Factory):
-    protocol = ClientProtocol
-
     def __init__(self, network):
         self.network = network
+        self.clients = list()
+
+    def buildProtocol(self, addr):
+        client = ClientProtocol(self)
+        self.clients.append(client)
+        return client
+
+    def removeClient(self, client):
+        self.clients.remove(client)
 
 
 def server_main(args):
+    from twisted.python import log as twisted_log
+
+    observer = twisted_log.PythonLoggingObserver()
+    observer.start()
+
+    logging.basicConfig(level=logging.DEBUG)
     network = setup_basic_network()
     reactor.listenTCP(9876, ClientProtocolFactory(network))
     reactor.run()

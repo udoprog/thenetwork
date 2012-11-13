@@ -15,7 +15,7 @@ function M.inCircle(pos_x, pos_y, x, y, radius)
 end
 
 
-function M.new_class(parent)
+function M.newClass(parent)
     NewClass = {}
     NewClass.__index = NewClass
 
@@ -24,6 +24,25 @@ function M.new_class(parent)
     end
 
     return NewClass
+end
+
+
+M._lookup = {
+    '0', '1', '2', '3',
+    '4', '5', '6', '7',
+    '8', '9', 'a', 'b',
+    'c', 'd', 'e', 'f'
+}
+
+
+function M.randomString(length)
+    local result = {}
+
+    for loop = 1,length do
+        result[loop] = M._lookup[math.random(1, #M._lookup)]
+    end
+
+    return table.concat(result)
 end
 
 

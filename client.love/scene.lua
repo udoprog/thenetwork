@@ -32,8 +32,11 @@ function Scene:setMovable(value) self._movable = movable end
 function Scene:draw_scene()
     for i=1,#self._sorted do
         zindex, id, entity = unpack(self._sorted[i])
-        entity:draw(self)
-        entity:unset()
+
+        if entity:isVisible() then
+            entity:draw(self)
+            entity:unset()
+        end
     end
 end
 
@@ -50,14 +53,16 @@ function Scene:update(ds)
         for i=#self._sorted, 1, -1 do
             zindex, id, entity = unpack(self._sorted[i])
 
-            if entity:checkPosition(self, mouse) and stateChecked then
-                entity:checkMouseState(self, mouse)
-                stateChecked = false
+            if entity:isVisible() then
+                if entity:checkPosition(self, mouse) and stateChecked then
+                    entity:checkMouseState(self, mouse)
+                    stateChecked = false
+                end
             end
         end
 
         if stateChecked and mouse:isStateDirty() then
-            print("No one caught the Dirty State")
+            --print("No one caught the Dirty State")
         end
     end
 end

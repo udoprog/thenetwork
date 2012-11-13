@@ -1,16 +1,15 @@
 local utils = require "utils"
 local graphics = require "graphics"
 local camera = require "camera"
+local eventqueue = require "eventqueue"
 
 require "entity"
 
-Menu = utils.new_class(Entity)
+Menu = utils.newClass(Entity)
 
 function Menu.new(title)
-    local menu = Entity.new()
+    local menu = Entity.new(0, 0)
     setmetatable(menu, Menu)
-    menu.x = 0
-    menu.y = 0
     menu.w = 100
     menu.h = 200
     menu.title = title
@@ -38,6 +37,6 @@ end
 
 function Menu:checkMouseState(scene, mouse)
     if mouse:isChanged('l', 'released') then
-        print("OK, YOU CLIKED")
+        eventqueue:push({type = "changeScene", name = "nodes"})
     end
 end
