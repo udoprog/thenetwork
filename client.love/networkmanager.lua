@@ -14,7 +14,11 @@ local function helloHandler(id, data)
 end
 
 local function serverChatHandler(id, data)
-    client:addChatEntry("<@server>", data.text)
+    chat:addChatEntry("<@server>", data.text)
+end
+
+local function chatHandler(id, data)
+    chat:addChatEntry(data.user, data.text)
 end
 
 M = {}
@@ -22,6 +26,7 @@ M = {}
 M.handlers = {
     ping = pingHandler,
     hello = helloHandler,
+    chat = chatHandler,
     serverchat = serverChatHandler,
 }
 
@@ -32,17 +37,19 @@ end
 function M:update(ds)
     local body = network:update(ds)
 
-    if body == nil then
-        return
+    if body ~= nil then
+        handler = self.handlers[body.type]
+
+        if handler ~= nil then
+            handler(body.id, body.data)
+        end
     end
 
-    handler = self.handlers[body.type]
+    network:lateUpdate()
+end
 
-    if handler == nil then
-        return
-    end
-
-    handler(body.id, body.data)
+function M.sendChatMessage(text)
+    network:sendJson("chat", {text=text})
 end
 
 return M

@@ -3,8 +3,7 @@ local network = require "network"
 local M = {}
 
 M.state = nil
-M.chatLog = {}
-M.chatLogLimit = 10
+M._chatVisible = true
 
 function M:setState(state)
     self.state = state
@@ -24,6 +23,14 @@ function M:isEstablished()
     end
     
     return self.state == "established"
+end
+
+function M:isChatVisible()
+    return self._chatVisible
+end
+
+function M:toggleChatVisible()
+    self._chatVisible = not self._chatVisible
 end
 
 return M

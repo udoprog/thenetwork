@@ -11,8 +11,7 @@ function Entity.new(x, y)
     entity.x = x
     entity.y = y
     entity._hovering = {}
-    entity.shapeListeners = {}
-    entity.callback = nil
+    entity._shapeListeners = {}
     entity._visible = true
     return entity
 end
@@ -26,8 +25,8 @@ function Entity:checkPosition(scene, mouse)
 
     local any = false
 
-    for i=1,#self.shapeListeners do
-        local shape, callback = unpack(self.shapeListeners[i])
+    for i=1,#self._shapeListeners do
+        local shape, callback = unpack(self._shapeListeners[i])
 
         if shape:checkIn(mouseX, mouseY, screenX, screenY) then
             any = true
@@ -70,5 +69,10 @@ function Entity:unset() end
 function Entity:addShapeListener(shape, callback, ...)
     local callback = function(self, action) callback(self, action, unpack(arg)) end
     self._hovering[callback] = false
-    table.insert(self.shapeListeners, {shape, callback})
+    table.insert(self._shapeListeners, {shape, callback})
+end
+
+function Entity:clearShapeListeners()
+    self._shapeListeners = {}
+    self._hovering = {}
 end

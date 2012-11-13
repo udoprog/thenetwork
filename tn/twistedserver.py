@@ -39,6 +39,8 @@ class ClientPinger(object):
 
         self.expectPong = False
         self.latency = latency
+        self.protocol.serverChat(
+            "LOL, your ping sucks @ {0} ms".format(latency * 1000))
 
     def __call__(self):
         if self.expectPong:
@@ -67,12 +69,12 @@ class ClientProtocol(basic.LineReceiver):
         if "text" not in message:
             raise self.Error("Missing 'text'")
 
-        for client in self.factory.clients:
-            client.sendMessage("chat", message)
+        text = message["text"]
+
+        self.sendAll("chat", {"text": text, "user": "?"})
 
     def serverChat(self, message):
-        for client in self.factory.clients:
-            client.sendMessage("serverchat", {"text": message})
+        self.sendAll("serverchat", {"text": message})
 
     def clientHello(self):
         self.sendMessage("hello", {"version": 0})
@@ -100,7 +102,8 @@ class ClientProtocol(basic.LineReceiver):
         self.sendLine(jsonbody)
 
     def sendAll(self, message_type, body):
-        pass
+        for client in self.factory.clients:
+            client.sendMessage(message_type, body)
 
     def lineReceived(self, jsonbody):
         try:

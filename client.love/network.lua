@@ -108,6 +108,7 @@ function M:update(ds)
             self._reconnect_timeout = 0
             print("Attempting to Reconnect")
             self:connect(self._host, self._port)
+            self._connected = true
         end
     end
 
@@ -120,15 +121,20 @@ function M:update(ds)
         self._reconnect_timeout = self._timeout
     end
 
-    if self._connected then
-        self._connected = self:sendBlock()
-    end
-
     if body ~= nil then
         return body
     end
 
     return nil
+end
+
+
+function M:lateUpdate(ds)
+    if not self._connected then
+        return
+    end
+
+    self._connected = self:sendBlock()
 end
 
 

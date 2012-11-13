@@ -9,6 +9,9 @@ local network = require "network"
 local networkmanager = require "networkmanager"
 local client = require "client"
 
+require "entity/chatwindow"
+require "entity/textinput"
+
 zoomlevels = {
     4.0,
     3.0,
@@ -30,19 +33,35 @@ function love.mousereleased(mouse_x, mouse_y, button)
 end
 
 function love.keypressed(key, unicode)
+    if client:isEstablished() and client.focused ~= nil then
+        client.focused:update(key, unicode)
+    end
+
     keyboard:updateState(key, 'pressed')
 end
 
-function love.keyreleased(key, ...)
-    keyboard:updateState(key, 'released')
-
+function love.keyreleased(key)
     if key == "escape" then
         love.event.push("quit")
     end
+
+    if key == 'f1' then
+        client:toggleChatVisible()
+    end
+
+    if client:isEstablished() and client.focused ~= nil then
+        client.focused:update(key, nil)
+    end
+
+    keyboard:updateState(key, 'released')
+end
+
+function sendMessage(input, text)
+    networkmanager.sendChatMessage(text)
 end
 
 function love.load()
-    love.graphics.setColorMode("replace")
+    -- love.graphics.setColorMode("replace")
 
     function onSceneUpdate(message)
         print(message)
@@ -53,6 +72,10 @@ function love.load()
 
     scenemanager:setCurrent("mainmenu")
     networkmanager:setup("localhost", 9876)
+
+    local w = love.graphics.getWidth()
+    chat = ChatWindow.new(w - 500, 0, 500, 400)
+    chatinput = TextInput.new(w - 500, 400, 500, sendMessage)
 end
 
 function love.update(ds)
@@ -67,16 +90,13 @@ function love.update(ds)
 end
 
 function love.draw()
-    love.graphics.print("CHAT", 10, 400)
-
-    for i=1,#client.chatLog do
-        local user, text = unpack(client.chatLog[i])
-        love.graphics.print(user .. ": " .. text, 10, 400 + i*30)
+    if client:isChatVisible() then
+        chat:draw()
+        chatinput:draw()
+        client.focused = chatinput
     end
 
     if client:isEstablished() then
-        graphics.debug()
-        graphics.print_states(10, 50, mouse)
         scenemanager:draw()
     else
         love.graphics.setColor(255, 255, 255)
@@ -85,4 +105,5 @@ function love.draw()
     end
 
     mouse:unset()
+    keyboard:unset()
 end
