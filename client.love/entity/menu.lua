@@ -6,6 +6,27 @@ local shape = require "shape"
 
 require "entity"
 
+MenuItem = utils.newClass()
+
+
+function MenuItem.new(title)
+    local self = {}
+    setmetatable(self, MenuItem)
+    self._title = title
+    return self
+end
+
+
+function MenuItem:getTitle()
+    return self._title
+end
+
+
+function MenuItem:setTitle(title)
+    self._title = title
+end
+
+
 Menu = utils.newClass(Entity)
 
 
@@ -37,42 +58,43 @@ function Menu:draw(scene)
     love.graphics.setFont(self.itemfont)
 
     for i, value in pairs(self.items) do
-        local title, callback = unpack(value)
-        local w = self.itemfont:getWidth(title)
-        local h = self.itemfont:getHeight(title)
+        local item, callback = unpack(value)
+        local itemTitle = item:getTitle()
+        local w = self.itemfont:getWidth(itemTitle)
+        local h = self.itemfont:getHeight(itemTitle)
 
-        if title == self.highlighted then
+        if item == self.highlighted then
             love.graphics.setColor(self.highlightcolor)
         else
             love.graphics.setColor(self.itemcolor)
         end
 
-        love.graphics.print(title, self.x, self.y + row)
+        love.graphics.print(itemTitle, self.x, self.y + row)
         row = row + h + 2
     end
 end
 
 
-function Menu:itemListener(action, title)
+function Menu:itemListener(action, item, callback)
     if action == "mouseover" then
-        self.highlighted = title
+        self.highlighted = item
         return
     end
 
-    if self.highlighted == title and action == "mouseout" then
+    if self.highlighted == item and action == "mouseout" then
         self.highlighted = nil
         return
     end
 
     if action == "mousereleased" then
-        print("Clicked: " .. title)
+        callback(item)
         return
     end
 end
 
 
-function Menu:addItem(title)
-    table.insert(self.items, {title, callback})
+function Menu:addItem(title, callback)
+    table.insert(self.items, {MenuItem.new(title), callback})
 
     self:clearShapeListeners()
 
@@ -83,11 +105,12 @@ function Menu:addItem(title)
     end
 
     for i, value in pairs(self.items) do
-        local title, callback = unpack(value)
-        local w = self.itemfont:getWidth(title)
-        local h = self.itemfont:getHeight(title)
+        local item, callback = unpack(value)
+        local itemTitle = item:getTitle()
+        local w = self.itemfont:getWidth(itemTitle)
+        local h = self.itemfont:getHeight(itemTitle)
         self:addShapeListener(shape.Rectangle.new(w, h, 0, row),
-                              self.itemListener, title)
+                              self.itemListener, item, callback)
         row = row + h + 2
     end
 end

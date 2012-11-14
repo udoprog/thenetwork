@@ -1,8 +1,4 @@
 local utils = require "utils"
-local graphics = require "graphics"
-local camera = require "camera"
-local eventqueue = require "eventqueue"
-local shape = require "shape"
 
 require "entity"
 

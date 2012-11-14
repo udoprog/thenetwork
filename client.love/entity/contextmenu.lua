@@ -64,6 +64,7 @@ end
 
 
 function ContextMenu:draw(scene)
+    love.graphics.setColorMode('replace')
     love.graphics.draw(self.images[self.focus], self.x - 65, self.y - 65)
 end
 

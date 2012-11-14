@@ -29,6 +29,7 @@ function S:load(onUpdate)
 end
 
 function S:draw_foreground()
+    love.graphics.setColorMode('replace')
     local screen_height = love.graphics.getHeight()
     graphics.fill_bar(10, -40, 10, 5, 20, 10, 2)
     love.graphics.draw(self.images.cpu, 0, screen_height - 40)

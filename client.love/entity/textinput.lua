@@ -27,9 +27,10 @@ end
 function TextInput:draw(scene)
     local width, lines = self.font:getWrap(self.buffer,
                                            self.w - 2*self.padding)
-
+    if lines < 1 then lines = 1 end
     local height = self.padding * 2 + self.font:getHeight() * lines
 
+    love.graphics.setColorMode('modulate')
     love.graphics.setColor(self.backgroundColor)
     love.graphics.rectangle('fill', self.x, self.y, self.w, height)
 

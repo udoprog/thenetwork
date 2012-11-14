@@ -21,6 +21,7 @@ end
 
 
 function Node:draw(scene)
+    love.graphics.setColorMode('replace')
     graphics.fill_node(self.x, self.y, self.r, self.hover)
 end
 

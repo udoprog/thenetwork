@@ -2,6 +2,7 @@ require "scene"
 
 local graphics = require "graphics"
 local imagemanager = require "imagemanager"
+local client = require "client"
 
 require "entity/menu"
 
@@ -12,9 +13,21 @@ function S:load(onUpdate)
     self:setMovable(false)
 
     menu = Menu.new(10, 500, "The Network")
-    menu:addItem("Join Game", function() end)
+
+    menu:addItem("Ready", function(item)
+        if client:isReady() then
+            item:setTitle("Ready")
+        else
+            item:setTitle("Not Ready")
+        end
+
+        client:toggleReady()
+    end)
+
     menu:addItem("Options", function() end)
-    menu:addItem("Exit", function() end)
+    menu:addItem("Exit", function()
+        love.event.push("quit")
+    end)
     self:add_entity("menu", menu)
 end
 

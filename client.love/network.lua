@@ -1,12 +1,15 @@
 require "socket"
+require "logger"
+
 json = require "libraries/dkjson"
 utils = require "utils"
 
+local log = Logger.new("network")
+
 local M = {}
 M._tcp = nil
-M._reconnect_timeout = 0
+M._reconnect = nil
 M._timeout = 5.0
-M._connected = false
 M._host = nil
 M._port = nil
 M._sendBuffer = {}
@@ -16,10 +19,15 @@ M._sendBufferIndex = 0
 function M:setup(host, port)
     self._host = host
     self._port = port
+    self:connect(host, port)
 end
 
 
 function M:connect(host, port)
+    if self._tcp then
+        self._tcp:close()
+    end
+
     self._tcp = socket.tcp()
     self._tcp:settimeout(0)
     self._tcp:connect(host, port)
@@ -35,116 +43,94 @@ function M:receiveJson()
     local status, body = self:receiveBlock()
 
     if body ~= nil then
-        jsonBody = json.decode(body)
-        return status, jsonBody
+        body = json.decode(body)
     end
 
-    return status, nil
+    return status, body
 end
 
 -- Buffer a message for later sending.
-function M:sendJson(typeName, data)
-    if self._tcp == nil then
-        return false
-    end
-
-    body = {
-        id = utils.randomString(16),
-        type = typeName,
-        data = data,
-    }
-
+function M:sendJson(typeName, body)
     jsonBody = json.encode(body)
     table.insert(M._sendBuffer, jsonBody .. "\n")
 end
 
 
 function M:receiveBlock()
-    if self._tcp == nil then
-        return false, nil
-    end
-
     local body, state = self._tcp:receive("*l")
-
-    if state == nil then
-        return true, body
-    end
-
-    if state == "closed" then
-        return false, nil
-    end
-
-    return true, nil
+    return state == nil or state == "timeout", body
 end
 
 
 function M:sendBlock()
     if #self._sendBuffer <= 0 then
-        return self._connected
+        return true
     end
 
-    local i, err = self._tcp:send(self._sendBuffer[1], self._sendBufferIndex)
+    local buffer = self._sendBuffer[1]
 
-    if i == nil then
+    local i, state = self._tcp:send(buffer, self._sendBufferIndex)
+
+    if state or i == nil then
         return false
     end
 
-    if i == #self._sendBuffer[1] then
+    log:info("Sent block of " .. tostring(i) .. " bytes")
+
+    if i == #buffer then
         table.remove(self._sendBuffer, 1)
         self._sendBufferIndex = 1
     else
         self._sendBufferIndex = i
     end
 
-    return self._connected
+    return true
 end
 
 
 function M:update(ds)
-    if not self._connected then
-        self._reconnect_timeout = self._reconnect_timeout - ds
+    if self._reconnect ~= nil then
+        self._reconnect = self._reconnect - ds
 
-        if self._reconnect_timeout <= 0 then
-            self._reconnect_timeout = 0
+        if self._reconnect <= 0 then
+            self._reconnect = nil
             print("Attempting to Reconnect")
             self:connect(self._host, self._port)
-            self._connected = true
         end
+
+        return
     end
 
-    local was_connected = self._connected
-    local body = nil
+    local ok, body = self:receiveJson()
 
-    self._connected, body = self:receiveJson()
-
-    if was_connected and not self._connected then
-        self._reconnect_timeout = self._timeout
+    if not ok then
+        self._reconnect = self._timeout
     end
 
-    if body ~= nil then
-        return body
-    end
-
-    return nil
+    return body
 end
 
 
 function M:lateUpdate(ds)
-    if not self._connected then
+    if not self:isConnected() then
         return
     end
 
-    self._connected = self:sendBlock()
+    local ok = self:sendBlock()
+
+    if not ok then
+        self._reconnect = self._timeout
+    end
 end
 
 
 function M:isConnected()
-    return self._connected
+    return self._reconnect == nil
 end
 
 
 function M:getReconnectTimeout()
-    return self._reconnect_timeout
+    return self._reconnect
 end
 
 return M

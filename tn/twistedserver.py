@@ -12,7 +12,18 @@ import logging
 import time
 
 
+# raise when you wish to report back an error.
+class Error(Exception):
+    pass
+
+
 log = logging.getLogger(__name__)
+
+
+Allow = "Allow"
+Deny = "Deny"
+Everyone = "Everyone"
+All = "All"
 
 
 class ClientPinger(object):
@@ -31,7 +42,7 @@ class ClientPinger(object):
 
     def pongHandler(self, message):
         if "time" not in message:
-            raise protocol.Error("Expecting 'time'")
+            raise Error("Expecting time field")
 
         previous_time = message["time"]
 
@@ -39,8 +50,6 @@ class ClientPinger(object):
 
         self.expectPong = False
         self.latency = latency
-        self.protocol.serverChat(
-            "LOL, your ping sucks @ {0} ms".format(latency * 1000))
 
     def __call__(self):
         if self.expectPong:
@@ -52,58 +61,109 @@ class ClientPinger(object):
 
 
 class ClientProtocol(basic.LineReceiver):
-    def __init__(self, factory):
-        self.factory = factory
+    delimiter = '\n'
+
+    def __init__(self, session):
+        self.session = session
+
+        self.ready = False
+        self.name = None
+        self.principals = set()
         self.pinger = ClientPinger(self, 10.0)
 
         self.handlers = {
-            "login": self.clientLogin,
-            "pong": self.pinger.pongHandler,
-            "chat": self.clientChat,
+            "login": ([
+                (Allow, Everyone, 'access'),
+            ], self.clientLogin),
+            "pong": ([
+                (Allow, Everyone, 'access'),
+            ], self.pinger.pongHandler),
+            "chat": ([
+                (Allow, 'g:authenticated', 'access'),
+            ], self.clientChat),
+            "playerupdate": ([
+                (Allow, 'g:authenticated', 'access'),
+            ], self.playerUpdate),
+        }
+
+    def getPlayerData(self):
+        """
+        Return a data dictionary describing this client.
+        """
+        return {
+            "name": self.name,
+            "ready": self.ready,
         }
 
     def clientLogin(self, message):
-        print message
+        if "name" not in message:
+            raise Error("Missing 'name'")
+
+        # check name of other clients.
+        for client in self.session.clients:
+            # client has not logged in yet.
+            if client.name is None:
+                continue
+
+            if client.name == message["name"]:
+                raise Error("Name already in use!")
+
+        self.name = message["name"]
+        self.principals.add("g:authenticated")
+
+        self.session.sendPlayerUpdate(self)
+        self.sendPlayerList()
 
     def clientChat(self, message):
         if "text" not in message:
-            raise self.Error("Missing 'text'")
+            raise Error("Expecting text field")
 
         text = message["text"]
 
-        self.sendAll("chat", {"text": text, "user": "?"})
+        self.session.sendChat(self.name, text)
 
-    def serverChat(self, message):
-        self.sendAll("serverchat", {"text": message})
+    def playerUpdate(self, message):
+        # ignore player updates after game has started.
+        if self.session.started:
+            return
 
-    def clientHello(self):
+        self.ready = message["ready"]
+        self.session.sendPlayerUpdate(self)
+
+        if all(c.ready for c in self.session.clients):
+            log.info("Starting Game")
+            self.session.startGame()
+
+    def sendHello(self):
         self.sendMessage("hello", {"version": 0})
 
-    # raise when you wish to report back an error.
-    class Error(Exception):
-        pass
-
-    delimiter = '\n'
-
-    def sendError(self, message_id, message):
+    def sendError(self, cid, text):
         self.sendMessage("error", {
-            "cid": message_id,
-            "message": message,
+            "cid": cid,
+            "text": text,
         })
 
-    def sendMessage(self, message_type, data):
+    def sendPlayerList(self):
+        """
+        Send a list of all other players.
+        """
+        players = dict()
+
+        for client in self.session.clients:
+            players[client.name] = client.getPlayerData()
+
+        self.sendMessage("playerList", {"players": players})
+
+    def sendMessage(self, messageType, data):
         body = dict()
         body["id"] = str(uuid.uuid4())
-        body["type"] = str(message_type)
+        body["type"] = str(messageType)
         body["data"] = data
+
         jsonbody = json.dumps(body)
 
-        log.info("Sending {0}: {1} bytes".format(message_type, len(jsonbody)))
+        log.info("Sending {0}: {1} bytes".format(messageType, len(jsonbody)))
         self.sendLine(jsonbody)
-
-    def sendAll(self, message_type, body):
-        for client in self.factory.clients:
-            client.sendMessage(message_type, body)
 
     def lineReceived(self, jsonbody):
         try:
@@ -111,52 +171,118 @@ class ClientProtocol(basic.LineReceiver):
         except:
             return self.sendError(None, "Message not a valid json object")
 
-        message_type = body.get("type", None)
-        message_id = body.get("id", None)
-        message_data = body.get("data", None)
+        messageType = body.get("type", None)
+        messageId = body.get("id", None)
+        messageData = body.get("data", None)
 
-        if message_type is None:
+        if messageType is None:
             return self.sendError(None, "Message without type")
-        if message_id is None:
+        if messageId is None:
             return self.sendError(None, "Message without id")
-        if message_data is None:
+        if messageData is None:
             return self.sendError(None, "Message without data")
 
-        log.info("Receiving {0}: {1} bytes".format(message_type,
+        log.info("Receiving {0}: {1} bytes".format(messageType,
                                                    len(jsonbody)))
 
-        handler = self.handlers.get(message_type)
+        result = self.handlers.get(messageType)
 
-        if handler is None:
-            return self.sendError(message_id, "Unknown message type")
+        if result is None:
+            return self.sendError(messageId, "Unknown message type")
+
+        acl, handler = result
+
+        if not self.checkACL(acl, "access"):
+            return self.sendError(messageId, "You are not allowed to perform "
+                                             "that action")
 
         try:
-            handler(message_data)
-        except self.Error as e:
-            self.sendError(message_id, str(e))
+            handler(messageData)
+        except Error as e:
+            self.sendError(messageId, str(e))
+
+    def checkACL(self, acl, checkedAction, defaultPolicy=False):
+        for (policy, principal, action) in acl:
+            if action != checkedAction and action != All:
+                continue
+
+            if principal == Everyone:
+                if policy == Allow:
+                    return True
+                if policy == Allow:
+                    return False
+            elif principal in self.principals:
+                if policy == Allow:
+                    return True
+                if policy == Deny:
+                    return False
+
+        return defaultPolicy
 
     def connectionMade(self):
         self.pinger.start()
-        self.clientHello()
-        self.serverChat("Hello Lowly Minions")
+        self.sendHello()
 
     def connectionLost(self, reason):
         self.pinger.stop()
-        self.factory.removeClient(self)
+
+        if self.name is not None:
+            self.session.sendPlayerLeft(self)
+
+        self.session.removeClient(self)
 
 
-class ClientProtocolFactory(protocol.Factory):
+class GameSession(protocol.Factory):
     def __init__(self, network):
+        # game network
         self.network = network
+
+        # has game been started?
+        self.started = False
+
+        # clients connected to the game.
         self.clients = list()
 
     def buildProtocol(self, addr):
         client = ClientProtocol(self)
-        self.clients.append(client)
+        self.addClient(client)
         return client
+
+    def addClient(self, client):
+        self.clients.append(client)
 
     def removeClient(self, client):
         self.clients.remove(client)
+
+    def sendChat(self, name, text):
+        if text.strip() == "":
+            return
+
+        self.sendToAll("chat", {"text": text, "user": name})
+
+    def sendPlayerLeft(self, player):
+        self.sendToAll("playerLeft", {"name": player.name})
+
+    def sendPlayerUpdate(self, player):
+        self.sendToAll("playerUpdate", {"name": player.name,
+                                        "player": player.getPlayerData()})
+
+    def startGame(self):
+        self.started = True
+        self.sendStartGame()
+
+    def sendStartGame(self):
+        self.sendToAll("startGame", None)
+
+    def sendToAll(self, messageType, data):
+        for client in self.clients:
+            client.sendMessage(messageType, data)
+
+    def sendToOthers(self, me, messageType, data):
+        for client in self.clients:
+            if client == me:
+                continue
+            client.sendMessage(messageType, data)
 
 
 def server_main(args):
@@ -167,5 +293,5 @@ def server_main(args):
 
     logging.basicConfig(level=logging.DEBUG)
     network = setup_basic_network()
-    reactor.listenTCP(9876, ClientProtocolFactory(network))
+    reactor.listenTCP(9876, GameSession(network))
     reactor.run()
