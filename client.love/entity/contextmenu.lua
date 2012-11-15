@@ -34,9 +34,9 @@ function ContextMenu.new(x, y, r)
 end
 
 
-function ContextMenu:buttonListener(action, name)
+function ContextMenu:buttonListener(action, actionName)
     if action == "mouseout" then
-        if self.focus == name then
+        if self.focus == actionName then
             self.focus = "base"
         end
 
@@ -44,13 +44,13 @@ function ContextMenu:buttonListener(action, name)
     end
 
     if action == "mouseover" then
-        self.focus = name
+        self.focus = actionName
         return
     end
 
     if action == "mousereleased" then
-        if name ~= "base" then
-            print("clicked one of my darlings: " .. name)
+        if actionName ~= "base" and self.node.callback then
+            self.node.callback(self.node, actionName)
         end
 
         self:hide()

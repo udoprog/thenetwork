@@ -28,7 +28,11 @@ function PlayersWindow:draw(scene)
     for name, player in pairs(self.players) do
         local fontHeight = self.font:getHeight()
         local ready = player.ready and "ready" or "not ready"
-        love.graphics.print(name .. " [" .. ready .. "]", self.x, self.y + row)
+        local mode = player.mode
+        local color = player.color
+
+        love.graphics.setColor(color)
+        love.graphics.print(name .. " [" .. ready .. "] [" .. mode .. "]", self.x, self.y + row)
         row = row + fontHeight
     end
 end
@@ -36,6 +40,10 @@ end
 
 function PlayersWindow:updatePlayer(name, player)
     self.players[name] = player
+end
+
+function PlayersWindow:getPlayer(name)
+    return self.players[name]
 end
 
 function PlayersWindow:clearPlayer(name)

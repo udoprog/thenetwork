@@ -24,10 +24,21 @@ function S:load(onUpdate)
         client:toggleReady()
     end)
 
+    menu:addItem("Mode: player", function(item)
+        client:toggleMode()
+        item:setTitle("Mode: " .. client:getMode())
+    end)
+
+    menu:addItem("Change Color", function(item)
+        client:toggleColor()
+        item:setColor(client:getColor())
+    end, client:getColor())
+
     menu:addItem("Options", function() end)
     menu:addItem("Exit", function()
         love.event.push("quit")
     end)
+
     self:add_entity("menu", menu)
 end
 

@@ -9,10 +9,11 @@ require "entity"
 MenuItem = utils.newClass()
 
 
-function MenuItem.new(title)
+function MenuItem.new(title, color)
     local self = {}
     setmetatable(self, MenuItem)
     self._title = title
+    self._color = color or {255, 255, 255}
     return self
 end
 
@@ -22,8 +23,18 @@ function MenuItem:getTitle()
 end
 
 
+function MenuItem:getColor()
+    return self._color
+end
+
+
 function MenuItem:setTitle(title)
     self._title = title
+end
+
+
+function MenuItem:setColor(color)
+    self._color = color
 end
 
 
@@ -39,7 +50,6 @@ function Menu.new(x, y, title)
     self.titlefont = love.graphics.newFont(18)
     self.itemfont = love.graphics.newFont(12)
     self.titlecolor = {255, 255, 255}
-    self.itemcolor = {128, 128, 128}
     self.highlightcolor = {255, 255, 255}
     return self
 end
@@ -66,7 +76,7 @@ function Menu:draw(scene)
         if item == self.highlighted then
             love.graphics.setColor(self.highlightcolor)
         else
-            love.graphics.setColor(self.itemcolor)
+            love.graphics.setColor(item:getColor())
         end
 
         love.graphics.print(itemTitle, self.x, self.y + row)
@@ -93,8 +103,8 @@ function Menu:itemListener(action, item, callback)
 end
 
 
-function Menu:addItem(title, callback)
-    table.insert(self.items, {MenuItem.new(title), callback})
+function Menu:addItem(title, callback, color)
+    table.insert(self.items, {MenuItem.new(title, color), callback})
 
     self:clearShapeListeners()
 

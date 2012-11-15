@@ -39,11 +39,11 @@ function scenemanager:draw()
         return
     end
 
-    current:draw_foreground()
-
     camera:set()
     current:draw_scene()
     camera:unset()
+
+    current:draw_foreground()
 end
 
 function scenemanager:unloadScene(name)
@@ -63,10 +63,11 @@ function scenemanager:setCurrent(name)
 
     if scene == nil then
         print("no such scene: " .. name)
-        return
+        return nil
     end
 
     self._current = scene
+    return scene
 end
 
 function scenemanager:getCurrent()

@@ -72,13 +72,15 @@ function sendMessage(input, text)
 end
 
 function love.load(args)
-    options.username = os.getenv("USER")
+    options.name = os.getenv("USER")
 
-    if not options.username then
-        print("Unable to determine username using environment variable USER")
+    if not options.name then
+        print("Unable to determine name using environment variable USER")
         love.event.push("quit")
         return
     end
+
+    client:setName(options.name)
 
     function onSceneUpdate(message)
         print(message)
@@ -97,7 +99,7 @@ function love.load(args)
 
     players = PlayersWindow.new(w - 500, 500, 500, 300)
 
-    networkmanager.sendLogin(options.username)
+    networkmanager.sendLogin(client:getName())
 end
 
 function love.update(ds)

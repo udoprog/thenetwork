@@ -24,18 +24,6 @@ function M.fill_bar(x, y, total, filled, bar_width, bar_height, padding)
 end
 
 
-function M.fill_node(x, y, radius, highlighted)
-    if highlighted then
-        love.graphics.setColor(185, 210, 255)
-    else
-        love.graphics.setColor(49, 104, 205)
-    end
-
-    love.graphics.circle('fill', x, y, radius, 30)
-
-end
-
-
 function M.connect_nodes(x1, y1, r1, x2, y2, r2)
     love.graphics.setLineWidth(4)
 
