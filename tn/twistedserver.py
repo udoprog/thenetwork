@@ -66,7 +66,7 @@ class ClientPinger(object):
 class ClientProtocol(basic.LineReceiver):
     delimiter = '\n'
 
-    def __init__(self, session, initialMoney=2500):
+    def __init__(self, G, session, initialMoney=2500):
         self.session = session
         self.cpu = 8
         self.cpuUsage = 0
@@ -79,6 +79,13 @@ class ClientProtocol(basic.LineReceiver):
         self.name = None
         self.principals = set()
         self.pinger = ClientPinger(self, 10.0)
+
+        # Is used to decide if a client knows that a Node belongs to an enemy
+        # in order to bypass traffic.
+        # Note: May contain false positives, it's part of the game.
+        self.knownEnemyNodes = set()
+
+        self.originalGraph = G
 
         self.handlers = {
             "login": ([
@@ -288,6 +295,24 @@ class ClientProtocol(basic.LineReceiver):
 
         self.session.removeClient(self)
 
+    def addKnownEnemy(self, node):
+        log.info("{0}: Hiding node {1}".format(self.name, node))
+        self.knownEnemyNodes.add(node)
+
+    def clearKnownEnemy(self, node):
+        log.info("{0}: Showing node {1}".format(self.name, node))
+        self.knownEnemyNodes.discard(node)
+
+    def buildTravelGraph(self, node):
+        graph = self.originalGraph.copy()
+
+        for enemyNode in self.knownEnemyNodes:
+            if enemyNode == node:
+                continue
+            graph.remove_node(enemyNode)
+
+        return graph
+
 
 class ClientData(object):
     def __init__(self, nodes, gateway):
@@ -418,7 +443,7 @@ class Packet(object):
 
 class GameSession(protocol.Factory):
     def __init__(self, G, networkLayout, scale=1000,
-                 gameTick=0.2, moneyTick=5.0, initialMoney=2500,
+                 gameTick=0.5, moneyTick=5.0, initialMoney=2500,
                  sessionTime=60.0 * 10):
 
         # game network
@@ -462,6 +487,9 @@ class GameSession(protocol.Factory):
 
         # Player node ownership.
         self.playerNodes = {}
+
+        # Player graph that will be used for finding shortest paths.
+        self.playerGraphs = {}
 
         # Currently pending packets.
         self.packets = list()
@@ -521,7 +549,7 @@ class GameSession(protocol.Factory):
         self.packets = packets
 
     def buildProtocol(self, addr):
-        client = ClientProtocol(self, initialMoney=self.initialMoney)
+        client = ClientProtocol(self.G, self, initialMoney=self.initialMoney)
         self.addClient(client)
         return client
 
@@ -550,13 +578,14 @@ class GameSession(protocol.Factory):
                                         "player": player.getPlayerData()})
 
     def getRandomFreeNode(self):
-        node = None
+        currentNode = None
+
         nodes = self.networkLayout.keys()
 
-        while node is None or node in self.playerNodes:
-            node = nodes[random.randint(0, len(nodes) - 1)]
+        while currentNode is None or currentNode in self.playerNodes:
+            currentNode = nodes[random.randint(0, len(nodes) - 1)]
 
-        return node
+        return currentNode
 
     def startGame(self):
         log.info("Starting Game")
@@ -600,7 +629,7 @@ class GameSession(protocol.Factory):
     def endGameBySessionTime(self):
         placement = len(self.clients)
 
-        for client in sorted(self.clients, lambda c: c.score):
+        for client in sorted(self.clients, lambda a, b: a.score < b.score):
             client.sendEndGame(placement)
             placement -= 1
 
@@ -641,12 +670,14 @@ class GameSession(protocol.Factory):
         if client.cpuUsage >= client.cpu:
             return
 
-        path = nx.shortest_path(self.G,
-                                clientData.gateway,
-                                destination,
-                                weight="weight")
+        graph = client.buildTravelGraph(destination)
 
-        if not path:
+        try:
+            path = nx.shortest_path(graph,
+                                    clientData.gateway,
+                                    destination,
+                                    weight="weight")
+        except nx.NetworkXNoPath:
             return
 
         path = path[1:]
@@ -673,9 +704,12 @@ class GameSession(protocol.Factory):
     def playerConnectArrived(self, nodeData, packet):
         if nodeData is not None:
             # Already owner, expose the owning user.
+            packet.owner.addKnownEnemy(packet.destination)
             packet.owner.sendNodeUpdate(packet.destination,
                                         nodeData.toDict())
             return
+
+        packet.owner.clearKnownEnemy(packet.destination)
 
         if packet.owner.money < self.connectCost:
             return
@@ -710,6 +744,7 @@ class GameSession(protocol.Factory):
 
             nodeData = NodeData(None, None)
             self.playerNodes.pop(packet.destination, None)
+            packet.owner.clearKnownEnemy(packet.destination)
 
         packet.owner.sendNodeUpdate(packet.destination,
                                     nodeData.toDict())
@@ -749,6 +784,9 @@ class GameSession(protocol.Factory):
 
         # Can only protect your own nodes.
         if nodeData.owner != packet.owner:
+            packet.owner.addKnownEnemy(packet.destination)
+            packet.owner.sendNodeUpdate(packet.destination,
+                                        nodeData.toDict())
             return
 
         if packet.owner.money < self.protectCost:
@@ -768,6 +806,15 @@ class GameSession(protocol.Factory):
         packet.owner.sendNodeUpdate(packet.currentNode,
                                     currentNode.toDict())
 
+    def handleHop(self, currentNode, packet):
+        if currentNode.owner != packet.owner:
+            packet.owner.addKnownEnemy(packet.currentNode)
+            packet.owner.sendNodeUpdate(packet.currentNode,
+                                        currentNode.toDict())
+            packet.stop()
+        else:
+            packet.owner.clearKnownEnemy(packet.currentNode)
+
     def playerConnectAction(self, action, packet):
         currentNode = self.playerNodes.get(packet.currentNode, None)
         nodeData = self.playerNodes.get(packet.destination, None)
@@ -777,9 +824,7 @@ class GameSession(protocol.Factory):
         elif action == "arrived":
             self.playerConnectArrived(nodeData, packet)
         elif action == "hop" and currentNode is not None:
-            if currentNode.owner != packet.owner:
-                packet.owner.sendNodeUpdate(packet.currentNode,
-                                            currentNode.toDict())
+            self.handleHop(currentNode, packet)
 
         packet.owner.sendPacketUpdate(packet)
 
@@ -792,8 +837,7 @@ class GameSession(protocol.Factory):
         elif action == "arrived":
             self.playerAttackArrived(nodeData, packet)
         elif action == "hop" and currentNode is not None:
-            if currentNode.owner != packet.owner:
-                packet.stop()
+            self.handleHop(currentNode, packet)
 
         packet.owner.sendPacketUpdate(packet)
 
@@ -806,8 +850,7 @@ class GameSession(protocol.Factory):
         elif action == "arrived":
             self.playerProtectArrived(nodeData, packet)
         elif action == "hop" and currentNode is not None:
-            if currentNode.owner != packet.owner:
-                packet.stop()
+            self.handleHop(currentNode, packet)
 
         packet.owner.sendPacketUpdate(packet)
 
@@ -825,7 +868,9 @@ def server_main(args):
     observer.start()
 
     logging.basicConfig(level=logging.DEBUG)
-    network, networkLayout = generate_complex_network(20)
+    network, networkLayout = generate_complex_network(40)
     reactor.listenTCP(9876, GameSession(network, networkLayout,
-                                        scale=2000, sessionTime=5 * 60))
+                                        moneyTick=4.0,
+                                        scale=2000,
+                                        sessionTime=5 * 60))
     reactor.run()
