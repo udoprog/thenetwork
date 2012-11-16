@@ -442,18 +442,18 @@ class GameSession(protocol.Factory):
         self.moneyTicker = None
         self.sessionTicker = None
 
-        self.resetGame()
+        self.resetGameState()
 
-    def resetGame(self):
-        if self.gameTicker:
+    def resetGameState(self):
+        if self.gameTicker is not None:
             self.gameTicker.stop()
             self.gameTicker = None
 
-        if self.moneyTicker:
+        if self.moneyTicker is not None:
             self.moneyTicker.stop()
             self.moneyTicker = None
 
-        if self.sessionTicker:
+        if self.sessionTicker is not None:
             self.sessionTicker.stop()
             self.sessionTicker = None
 
@@ -466,19 +466,17 @@ class GameSession(protocol.Factory):
         # Currently pending packets.
         self.packets = list()
 
-        # Has game been started?
-        self.started = False
-
         # Clients connected to the game.
         self.clients = list()
 
-        # Looping calls.
-        self.gameTicker = task.LoopingCall(self.onGameTick)
-        self.moneyTicker = task.LoopingCall(self.onMoneyTick)
-        self.sessionTicker = task.LoopingCall(self.onSessionTick)
-
+        # Current running time of the sessino.
         self.currentTime = 0
+
+        # The current placement being contended for.
         self.currentPlacement = 0
+
+        # Has game been started?
+        self.started = False
 
     def onGameTick(self):
         if not self.started:
@@ -537,7 +535,7 @@ class GameSession(protocol.Factory):
             self.clients.remove(client)
 
         if len(self.clients) == 0:
-            self.resetGame()
+            self.resetGameState()
 
     def sendChat(self, name, text):
         if text.strip() == "":
@@ -564,12 +562,14 @@ class GameSession(protocol.Factory):
     def startGame(self):
         log.info("Starting Game")
 
+        if self.started:
+            log.error("Game already started?")
+            return
+
         for client in self.clients:
             node = self.getRandomFreeNode()
             self.clientData[client] = ClientData([node], node)
             self.playerNodes[node] = NodeData(client, client, defense=1)
-
-        self.started = True
 
         for client in self.clients:
             client.sendMessage("startGame", {
@@ -586,9 +586,17 @@ class GameSession(protocol.Factory):
 
                 client.sendNodeUpdate(node, data.toDict())
 
+        # Looping calls.
+        self.gameTicker = task.LoopingCall(self.onGameTick)
         self.gameTicker.start(self.gameTick)
+
+        self.moneyTicker = task.LoopingCall(self.onMoneyTick)
         self.moneyTicker.start(self.moneyTick)
+
+        self.sessionTicker = task.LoopingCall(self.onSessionTick)
         self.sessionTicker.start(1.0)
+
+        self.started = True
 
     def endGameBySessionTime(self):
         placement = len(self.clients)
@@ -597,7 +605,7 @@ class GameSession(protocol.Factory):
             client.sendEndGame(placement)
             placement -= 1
 
-        self.resetGame()
+        self.resetGameState()
 
     def getNodes(self):
         result = list()

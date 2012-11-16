@@ -26,7 +26,7 @@ end
 
 local function chatHandler(id, data)
     chat:addChatEntry("<" .. data.user .. ">: ", data.text)
-    client:toggleChatVisible()
+    client:setChatVisible(true)
 end
 
 local function errorHandler(id, data)
@@ -144,18 +144,23 @@ function M:update(ds)
 
     if network:isConnected() then
         if client:isLoggedIn() then
+            -- If user is logged in then we want to push updates.
             if client:isChanged() then
                 M.sendPlayerUpdate(client)
                 client:unset()
             end
         else
+            -- If login is not pending, send a login request.
             if not client:isLoginPending() then
                 M.sendLogin(client)
                 client:setLoginPending(true)
             end
         end
     else
+        -- If not connected, then definitely not logged in or pending a login
+        -- response.
         client:setLoggedIn(false)
+        client:setLoginPending(false)
     end
 end
 

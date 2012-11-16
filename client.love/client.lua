@@ -77,6 +77,10 @@ function M:toggleChatVisible()
     self._chatVisible = not self._chatVisible
 end
 
+function M:setChatVisible(chatVisible)
+    self._chatVisible = chatVisible
+end
+
 function M:isPlayersVisible()
     return self._playersVisible
 end

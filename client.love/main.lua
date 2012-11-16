@@ -24,7 +24,7 @@ zoomlevels = {
 }
 
 options = {
-    username = nil,
+    name = nil,
     host = "localhost",
     port = 9876,
 }
@@ -71,14 +71,54 @@ function sendMessage(input, text)
     networkmanager.sendChatMessage(text)
 end
 
-function love.load(args)
+function parseArguments(args)
+    local positional = 1
+    local i = 2
+
+    -- Default values.
     options.name = os.getenv("USER")
 
-    if not options.name then
-        print("Unable to determine name using environment variable USER")
+    while i <= #args do
+        if args[i] == "--user" then
+            if #args < i+1 then
+                error("Expected argument for --user")
+            end
+
+            options.user = args[i+1]
+            i = i + 1
+        else
+            if positional == 1 then
+                options.host = args[i]
+            elseif positional == 2 then
+                options.port = tonumber(args[i])
+            else
+                error("Unexpected argument '" .. args[i] .. "'")
+            end
+
+            positional = positional + 1
+        end
+
+        i = i + 1
+    end
+
+    if options.name == nil then
+        error("Expect username through environment USER or " ..
+              "argument for --user")
+    end
+end
+
+function love.load(args)
+    ok, result = pcall(parseArguments, args)
+
+    if not ok then
+        print("Failed to handle commandline arguments")
         love.event.push("quit")
         return
     end
+
+    print("Name: " .. options.name)
+    print("Host: " .. options.host)
+    print("Port: " .. tostring(options.port))
 
     client:setName(options.name)
 
