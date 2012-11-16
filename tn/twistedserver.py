@@ -428,8 +428,8 @@ class GameSession(protocol.Factory):
         self.gameTick = gameTick
         self.moneyTick = moneyTick
 
-        self.attackCost = 1000
-        self.protectCost = 1000
+        self.attackCost = 500
+        self.protectCost = 500
         self.connectCost = 250
         self.attackScore = 10
         self.protectScore = 5
@@ -489,7 +489,6 @@ class GameSession(protocol.Factory):
             return
 
         for node, nodeData in self.playerNodes.items():
-            print node, nodeData
             nodeData.owner.money += self.nodeMoney
             nodeData.owner.score += 1
 
@@ -710,6 +709,7 @@ class GameSession(protocol.Factory):
                 self.endGameFor(nodeData.gatewayFor)
 
             nodeData = NodeData(None, None)
+            self.playerNodes.pop(packet.destination, None)
 
         packet.owner.sendNodeUpdate(packet.destination,
                                     nodeData.toDict())
@@ -778,7 +778,8 @@ class GameSession(protocol.Factory):
             self.playerConnectArrived(nodeData, packet)
         elif action == "hop" and currentNode is not None:
             if currentNode.owner != packet.owner:
-                packet.owner.sendNodeUpdate(packet.currentNode, currentNode)
+                packet.owner.sendNodeUpdate(packet.currentNode,
+                                            currentNode.toDict())
 
         packet.owner.sendPacketUpdate(packet)
 
@@ -824,6 +825,7 @@ def server_main(args):
     observer.start()
 
     logging.basicConfig(level=logging.DEBUG)
-    network, networkLayout = generate_complex_network(40)
-    reactor.listenTCP(9876, GameSession(network, networkLayout, scale=2000))
+    network, networkLayout = generate_complex_network(20)
+    reactor.listenTCP(9876, GameSession(network, networkLayout,
+                                        scale=2000, sessionTime=5 * 60))
     reactor.run()
