@@ -13,6 +13,10 @@ local S = Scene.new()
 S.cpu = 0
 S.cpuUsage = 0
 S.money = 0
+S.minutes = 0
+S.seconds = 0
+S.timerFont = love.graphics.newFont(18)
+S.moneyFont = love.graphics.newFont(18)
 
 function S:load(onUpdate)
     self:clear()
@@ -79,12 +83,34 @@ function S:setPlayerData(data)
     self.money = data.money
 end
 
+function S:setTime(minutes, seconds)
+    self.minutes = minutes
+    self.seconds = seconds
+end
+
 function S:draw_foreground()
+    local screenHeight = love.graphics.getHeight()
+    local screenWidth = love.graphics.getWidth()
+
+    -- CPU
     love.graphics.setColorMode('replace')
-    local screen_height = love.graphics.getHeight()
     graphics.fill_bar(10, -40, self.cpu, self.cpuUsage, 20, 10, 2)
-    love.graphics.draw(self.images.cpu, 0, screen_height - 40)
-    love.graphics.print("$" .. tostring(self.money), 50, screen_height - 40)
+    love.graphics.draw(self.images.cpu, 0, screenHeight - 40)
+
+    -- Money
+    local moneyHeight = self.moneyFont:getHeight()
+    love.graphics.setFont(self.moneyFont)
+    love.graphics.print("$" .. tostring(self.money),
+                        self.images.cpu:getWidth() + 10,
+                        screenHeight - self.images.cpu:getHeight() / 2 -
+                        moneyHeight / 2)
+
+    -- Timer
+    local timerText = string.format("%02d:%02d", self.minutes, self.seconds)
+    love.graphics.setFont(self.timerFont)
+    local timerWidth = self.timerFont:getWidth(timerText)
+    local timerX = screenWidth / 2 - timerWidth / 2
+    love.graphics.print(timerText, timerX, 20)
 end
 
 return S

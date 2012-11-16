@@ -35,6 +35,8 @@ function ChatWindow:draw(scene)
     love.graphics.rectangle('fill', self.x, self.y, self.w, height + self.padding)
     love.graphics.setColor(self.foregroundColor)
 
+    love.graphics.setFont(self.font)
+
     local row = self.padding
 
     for i, item in pairs(self.items) do

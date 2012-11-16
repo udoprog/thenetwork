@@ -71,6 +71,7 @@ class ClientProtocol(basic.LineReceiver):
         self.cpu = 8
         self.cpuUsage = 0
         self.money = initialMoney
+        self.score = 0
 
         self.ready = False
         self.mode = "player"
@@ -417,7 +418,9 @@ class Packet(object):
 
 class GameSession(protocol.Factory):
     def __init__(self, G, networkLayout, scale=1000,
-                 gameTick=0.2, moneyTick=5.0, initialMoney=2500):
+                 gameTick=0.2, moneyTick=5.0, initialMoney=2500,
+                 sessionTime=60.0 * 10):
+
         # game network
         self.G = G
         self.networkLayout = networkLayout
@@ -428,12 +431,32 @@ class GameSession(protocol.Factory):
         self.attackCost = 1000
         self.protectCost = 1000
         self.connectCost = 250
+        self.attackScore = 10
+        self.protectScore = 5
+        self.connectScore = 1
         self.nodeMoney = 10
         self.initialMoney = initialMoney
+        self.sessionTime = sessionTime
+
+        self.gameTicker = None
+        self.moneyTicker = None
+        self.sessionTicker = None
 
         self.resetGame()
 
     def resetGame(self):
+        if self.gameTicker:
+            self.gameTicker.stop()
+            self.gameTicker = None
+
+        if self.moneyTicker:
+            self.moneyTicker.stop()
+            self.moneyTicker = None
+
+        if self.sessionTicker:
+            self.sessionTicker.stop()
+            self.sessionTicker = None
+
         # Client specific data.
         self.clientData = {}
 
@@ -452,7 +475,9 @@ class GameSession(protocol.Factory):
         # Looping calls.
         self.gameTicker = task.LoopingCall(self.onGameTick)
         self.moneyTicker = task.LoopingCall(self.onMoneyTick)
+        self.sessionTicker = task.LoopingCall(self.onSessionTick)
 
+        self.currentTime = 0
         self.currentPlacement = 0
 
     def onGameTick(self):
@@ -468,9 +493,21 @@ class GameSession(protocol.Factory):
         for node, nodeData in self.playerNodes.items():
             print node, nodeData
             nodeData.owner.money += self.nodeMoney
+            nodeData.owner.score += 1
 
         for client in self.clients:
             client.sendPlayerData(client)
+
+    def onSessionTick(self):
+        self.currentTime += 1
+
+        if self.currentTime >= self.sessionTime:
+            self.endGameBySessionTime()
+
+        timeLeft = self.sessionTime - self.currentTime
+
+        self.sendToAll("time", {"minutes": int(timeLeft / 60),
+                                "seconds": int(timeLeft % 60)})
 
     def movePackets(self):
         packets = list()
@@ -496,7 +533,8 @@ class GameSession(protocol.Factory):
         self.currentPlacement += 1
 
     def removeClient(self, client):
-        self.clients.remove(client)
+        if client in self.clients:
+            self.clients.remove(client)
 
         if len(self.clients) == 0:
             self.resetGame()
@@ -550,6 +588,16 @@ class GameSession(protocol.Factory):
 
         self.gameTicker.start(self.gameTick)
         self.moneyTicker.start(self.moneyTick)
+        self.sessionTicker.start(1.0)
+
+    def endGameBySessionTime(self):
+        placement = len(self.clients)
+
+        for client in sorted(self.clients, lambda c: c.score):
+            client.sendEndGame(placement)
+            placement -= 1
+
+        self.resetGame()
 
     def getNodes(self):
         result = list()
@@ -633,6 +681,7 @@ class GameSession(protocol.Factory):
         packet.owner.sendNodeUpdate(packet.destination,
                                     nodeData.toDict())
         packet.owner.sendPlayerData(packet.owner)
+        packet.owner.score += self.connectScore
 
     def playerAttackArrived(self, nodeData, packet):
         if nodeData is None:
@@ -659,6 +708,7 @@ class GameSession(protocol.Factory):
         owner.sendNodeUpdate(packet.destination,
                              nodeData.toDict())
         packet.owner.sendPlayerData(packet.owner)
+        packet.owner.score += self.attackScore
 
     def endGameFor(self, client):
         packets = list()
@@ -704,6 +754,7 @@ class GameSession(protocol.Factory):
         packet.owner.sendNodeUpdate(packet.destination,
                                     nodeData.toDict())
         packet.owner.sendPlayerData(packet.owner)
+        packet.owner.score += self.protectScore
 
     def playerPacketStopped(self, currentNode, packet):
         packet.owner.sendNodeUpdate(packet.currentNode,

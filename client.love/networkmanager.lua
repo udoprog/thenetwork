@@ -26,6 +26,7 @@ end
 
 local function chatHandler(id, data)
     chat:addChatEntry("<" .. data.user .. ">: ", data.text)
+    client:toggleChatVisible()
 end
 
 local function errorHandler(id, data)
@@ -73,6 +74,8 @@ local function startGame(id, data)
     gatewayNode = nodes:get_entity(data.gateway)
 
     camera:lookat(gatewayNode.x, gatewayNode.y)
+    client:togglePlayersVisible()
+    client:toggleChatVisible()
 end
 
 local function nodeUpdate(id, body)
@@ -88,6 +91,16 @@ end
 local function playerData(id, body)
     nodes = scenemanager:getCurrent()
     nodes:setPlayerData(body)
+end
+
+local function time(id, body)
+    nodes = scenemanager:getCurrent()
+
+    if nodes == nil then
+        return
+    end
+
+    nodes:setTime(body.minutes, body.seconds)
 end
 
 local function endGame(id, body)
@@ -108,6 +121,7 @@ M.handlers = {
     packetUpdate = packetUpdate,
     playerData = playerData,
     endGame = endGame,
+    time = time,
 }
 
 function M:setup(host, port)

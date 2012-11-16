@@ -24,6 +24,7 @@ function PlayersWindow:draw(scene)
 
     love.graphics.setColorMode('modulate')
     love.graphics.setColor(self.foregroundColor)
+    love.graphics.setFont(self.font)
 
     for name, player in pairs(self.players) do
         local fontHeight = self.font:getHeight()

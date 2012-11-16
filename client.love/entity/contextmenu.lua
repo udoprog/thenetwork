@@ -40,7 +40,7 @@ function ContextMenu:hideListener(action)
         self:hide()
     end
 
-    if action == 'mouseover' then
+    if action == 'mousereleased' then
         self:hide()
     end
 end
