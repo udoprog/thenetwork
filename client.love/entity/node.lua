@@ -1,10 +1,11 @@
 local utils = require "utils"
 local graphics = require "graphics"
 local shape = require "shape"
+local imagemanager = require "imagemanager"
 
 require "entity"
 
-local neutralColor = {128, 128, 128}
+local neutralColor = {200, 200, 200}
 
 Node = utils.newClass(Entity)
 
@@ -20,8 +21,18 @@ function Node.new(scene, name, x, y, r, callback)
     self.hover = false
     self.neighbours = {}
     self.owner = nil
-    self.defense = 1
+    self.defense = nil
     self.gatewayFor = nil
+
+    self.shields = {
+        s1 = imagemanager:loadImage("shield_1"),
+        s2 = imagemanager:loadImage("shield_2"),
+        s3 = imagemanager:loadImage("shield_3"),
+        s4 = imagemanager:loadImage("shield_4"),
+        s5 = imagemanager:loadImage("shield_5"),
+        snil = imagemanager:loadImage("shield_nil"),
+    }
+
     self:addShapeListener(shape.Circle.new(self.r), self.shapeListener)
     return self
 end
@@ -39,26 +50,31 @@ function Node:draw(scene)
         love.graphics.setColor(neutralColor)
     end
 
-    love.graphics.circle('fill', self.x, self.y, radius, size)
+    love.graphics.circle('fill', self.x, self.y, radius, 50)
 
     if self.hover then
-        love.graphics.setColor(255, 255, 255, 255)
-    else
         love.graphics.setColor(255, 255, 255, 128)
+        love.graphics.circle('fill', self.x, self.y, radius, 50)
     end
-
-    love.graphics.circle('fill', self.x, self.y, radius, size)
 
     if self.gatewayFor ~= nil then
         local player = players:getPlayer(self.gatewayFor)
         love.graphics.setColor(player.color)
         love.graphics.setLineWidth(4)
-        love.graphics.circle('line', self.x, self.y, radius + 4)
+        love.graphics.circle('line', self.x, self.y, radius + 8, 50)
     end
 
-    love.graphics.setColor({0, 255, 255})
-    love.graphics.setLineWidth(self.defense * 2)
-    love.graphics.circle('line', self.x, self.y, radius + 6 + self.defense * 2)
+    local shield = nil
+
+    if self.defense == nil then
+        shield = self.shields.snil
+    else
+        shield = self.shields["s" .. tostring(self.defense)]
+    end
+
+    if shield ~= nil then
+        love.graphics.draw(shield, self.x + 10, self.y + 10)
+    end
 end
 
 

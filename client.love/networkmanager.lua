@@ -14,7 +14,10 @@ local function pingHandler(id, data)
 end
 
 local function helloHandler(id, data)
-    client:setState("established")
+    client:setLoggedIn(true)
+    client:setLoginPending(false)
+    M.sendPlayerUpdate(client)
+    client:unset()
 end
 
 local function serverChatHandler(id, data)
@@ -87,6 +90,10 @@ local function playerData(id, body)
     nodes:setPlayerData(body)
 end
 
+local function endGame(id, body)
+    client:setGameEnding(body.placement)
+end
+
 M.handlers = {
     ping = pingHandler,
     hello = helloHandler,
@@ -100,6 +107,7 @@ M.handlers = {
     nodeUpdate = nodeUpdate,
     packetUpdate = packetUpdate,
     playerData = playerData,
+    endGame = endGame,
 }
 
 function M:setup(host, port)
@@ -107,10 +115,6 @@ function M:setup(host, port)
 end
 
 function M:update(ds)
-    if client:isChanged() then
-        M.sendPlayerUpdate(client)
-    end
-
     local body = network:update(ds)
 
     if body ~= nil then
@@ -123,6 +127,22 @@ function M:update(ds)
     end
 
     network:lateUpdate()
+
+    if network:isConnected() then
+        if client:isLoggedIn() then
+            if client:isChanged() then
+                M.sendPlayerUpdate(client)
+                client:unset()
+            end
+        else
+            if not client:isLoginPending() then
+                M.sendLogin(client)
+                client:setLoginPending(true)
+            end
+        end
+    else
+        client:setLoggedIn(false)
+    end
 end
 
 function M.sendPacket(typeName, data)
@@ -141,12 +161,12 @@ function M.sendPlayerUpdate(player)
     M.sendPacket("playerupdate", player:getData())
 end
 
-function M.sendChatMessage(text)
-    M.sendPacket("chat", {text=text})
+function M.sendLogin(client)
+    M.sendPacket("login", {name=client:getName()})
 end
 
-function M.sendLogin(name)
-    M.sendPacket("login", {name=name})
+function M.sendChatMessage(text)
+    M.sendPacket("chat", {text=text})
 end
 
 function M.sendPong(time)

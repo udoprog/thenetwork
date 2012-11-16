@@ -40,7 +40,7 @@ function love.mousereleased(mouse_x, mouse_y, button)
 end
 
 function love.keypressed(key, unicode)
-    if client:isEstablished() and client.focused ~= nil then
+    if client:isLoggedIn() and client.focused ~= nil then
         client.focused:update(key, unicode)
     end
 
@@ -60,7 +60,7 @@ function love.keyreleased(key)
         client:togglePlayersVisible()
     end
 
-    if client:isEstablished() and client.focused ~= nil then
+    if client:isLoggedIn() and client.focused ~= nil then
         client.focused:update(key, nil)
     end
 
@@ -98,23 +98,25 @@ function love.load(args)
     chatinput = TextInput.new(w - 500, 400, 500, sendMessage)
 
     players = PlayersWindow.new(w - 500, 500, 500, 300)
-
-    networkmanager.sendLogin(client:getName())
 end
 
 function love.update(ds)
     mouse:update(ds, love.mouse.getPosition())
 
-    if client:isEstablished() then
-        scenemanager:update(ds)
-    end
-
+    scenemanager:update(ds)
     eventqueue:update(ds)
     networkmanager:update(ds)
 end
 
 function love.draw()
-    if client:isEstablished() then
+    if client:isGameEnded() then
+        local placement = tostring(client:getGameEnding())
+        love.graphics.print("The game has ended", 10, 10)
+        love.graphics.print("You ended up at place: " .. placement, 10, 30)
+        return
+    end
+
+    if network:isConnected() and client:isLoggedIn() then
         scenemanager:draw()
 
         if client:isChatVisible() then
@@ -129,16 +131,15 @@ function love.draw()
     else
         love.graphics.setColor(255, 0, 0)
 
-        if not network:isConnected() then
+        if client:isLoginPending() then
+            love.graphics.print("Connecting...", 10, 10)
+        else
             love.graphics.print("NOT CONNECTED", 10, 10)
             local timeout = string.format("%.01f", network:getReconnectTimeout())
             love.graphics.print("Reconnecting in " .. timeout, 10, 30)
-        else
-            love.graphics.print("Connecting...", 10, 10)
         end
     end
 
     mouse:unset()
     keyboard:unset()
-    client:unset()
 end

@@ -66,10 +66,11 @@ class ClientPinger(object):
 class ClientProtocol(basic.LineReceiver):
     delimiter = '\n'
 
-    def __init__(self, session):
+    def __init__(self, session, initialMoney=2500):
         self.session = session
         self.cpu = 8
         self.cpuUsage = 0
+        self.money = initialMoney
 
         self.ready = False
         self.mode = "player"
@@ -107,6 +108,7 @@ class ClientProtocol(basic.LineReceiver):
             "color": self.color,
             "cpu": self.cpu,
             "cpuUsage": self.cpuUsage,
+            "money": self.money,
         }
 
     def clientLogin(self, message):
@@ -149,6 +151,7 @@ class ClientProtocol(basic.LineReceiver):
 
         if all(c.ready for c in self.session.clients):
             self.session.startGame()
+            self.sendPlayerData(self)
 
     def nodeAction(self, message):
         if not self.session.started:
@@ -196,6 +199,9 @@ class ClientProtocol(basic.LineReceiver):
 
     def sendPacketUpdate(self, packet):
         self.sendMessage("packetUpdate", packet.toDict())
+
+    def sendEndGame(self, placement):
+        self.sendMessage("endGame", {"placement": placement})
 
     def sendError(self, cid, text):
         self.sendMessage("error", {
@@ -295,10 +301,10 @@ class ClientData(object):
 
 
 class NodeData(object):
-    def __init__(self, owner, gatewayFor):
-        self.defense = 1
+    def __init__(self, owner, gatewayFor, defense=None):
         self.owner = owner
         self.gatewayFor = gatewayFor
+        self.defense = defense
 
     def toDict(self):
         gatewayFor = None
@@ -316,6 +322,12 @@ class NodeData(object):
             "gatewayFor": gatewayFor,
             "defense": self.defense,
         }
+
+    def __repr__(self):
+        return ("NodeData owner={0!r} gatewayFor={1!r} "
+                "defense={2!r}").format(self.owner,
+                                        self.gatewayFor,
+                                        self.defense)
 
 
 class Packet(object):
@@ -404,13 +416,29 @@ class Packet(object):
 
 
 class GameSession(protocol.Factory):
-    def __init__(self, G, networkLayout, scale=1000):
+    def __init__(self, G, networkLayout, scale=1000,
+                 gameTick=0.2, moneyTick=5.0, initialMoney=2500):
         # game network
         self.G = G
         self.networkLayout = networkLayout
-        self.clientData = {}
-        self.playerNodes = {}
         self.scale = scale
+        self.gameTick = gameTick
+        self.moneyTick = moneyTick
+
+        self.attackCost = 1000
+        self.protectCost = 1000
+        self.connectCost = 250
+        self.nodeMoney = 10
+        self.initialMoney = initialMoney
+
+        self.resetGame()
+
+    def resetGame(self):
+        # Client specific data.
+        self.clientData = {}
+
+        # Player node ownership.
+        self.playerNodes = {}
 
         # Currently pending packets.
         self.packets = list()
@@ -421,11 +449,28 @@ class GameSession(protocol.Factory):
         # Clients connected to the game.
         self.clients = list()
 
-        self.gameTicker = task.LoopingCall(self.gameTick)
-        self.gameTicker.start(0.2)
+        # Looping calls.
+        self.gameTicker = task.LoopingCall(self.onGameTick)
+        self.moneyTicker = task.LoopingCall(self.onMoneyTick)
 
-    def gameTick(self):
+        self.currentPlacement = 0
+
+    def onGameTick(self):
+        if not self.started:
+            return
+
         self.movePackets()
+
+    def onMoneyTick(self):
+        if not self.started:
+            return
+
+        for node, nodeData in self.playerNodes.items():
+            print node, nodeData
+            nodeData.owner.money += self.nodeMoney
+
+        for client in self.clients:
+            client.sendPlayerData(client)
 
     def movePackets(self):
         packets = list()
@@ -442,15 +487,19 @@ class GameSession(protocol.Factory):
         self.packets = packets
 
     def buildProtocol(self, addr):
-        client = ClientProtocol(self)
+        client = ClientProtocol(self, initialMoney=self.initialMoney)
         self.addClient(client)
         return client
 
     def addClient(self, client):
         self.clients.append(client)
+        self.currentPlacement += 1
 
     def removeClient(self, client):
         self.clients.remove(client)
+
+        if len(self.clients) == 0:
+            self.resetGame()
 
     def sendChat(self, name, text):
         if text.strip() == "":
@@ -480,7 +529,7 @@ class GameSession(protocol.Factory):
         for client in self.clients:
             node = self.getRandomFreeNode()
             self.clientData[client] = ClientData([node], node)
-            self.playerNodes[node] = NodeData(client, client)
+            self.playerNodes[node] = NodeData(client, client, defense=1)
 
         self.started = True
 
@@ -498,6 +547,9 @@ class GameSession(protocol.Factory):
                     continue
 
                 client.sendNodeUpdate(node, data.toDict())
+
+        self.gameTicker.start(self.gameTick)
+        self.moneyTicker.start(self.moneyTick)
 
     def getNodes(self):
         result = list()
@@ -564,22 +616,32 @@ class GameSession(protocol.Factory):
         self.sendPacket(client, destination, self.playerProtectAction)
 
     def playerConnectArrived(self, nodeData, packet):
-        if nodeData is None:
-            nodeData = NodeData(packet.owner, None)
-
-            self.playerNodes[packet.destination] = nodeData
-
+        if nodeData is not None:
+            # Already owner, expose the owning user.
             packet.owner.sendNodeUpdate(packet.destination,
                                         nodeData.toDict())
             return
 
-        # Already owner, expose the owning user.
+        if packet.owner.money < self.connectCost:
+            return
+
+        packet.owner.money -= self.connectCost
+
+        nodeData = NodeData(packet.owner, None, defense=1)
+        self.playerNodes[packet.destination] = nodeData
+
         packet.owner.sendNodeUpdate(packet.destination,
                                     nodeData.toDict())
+        packet.owner.sendPlayerData(packet.owner)
 
     def playerAttackArrived(self, nodeData, packet):
         if nodeData is None:
             return
+
+        if packet.owner.money < self.attackCost:
+            return
+
+        packet.owner.money -= self.attackCost
 
         if nodeData.defense > 0:
             nodeData.defense -= 1
@@ -587,13 +649,40 @@ class GameSession(protocol.Factory):
         owner = nodeData.owner
 
         if nodeData.defense <= 0:
+            if nodeData.gatewayFor is not None:
+                self.endGameFor(nodeData.gatewayFor)
+
             nodeData = NodeData(None, None)
-            self.playerNodes[packet.destination] = None
 
         packet.owner.sendNodeUpdate(packet.destination,
                                     nodeData.toDict())
         owner.sendNodeUpdate(packet.destination,
                              nodeData.toDict())
+        packet.owner.sendPlayerData(packet.owner)
+
+    def endGameFor(self, client):
+        packets = list()
+        playerNodes = dict()
+
+        for node, nodeData in self.playerNodes.items():
+            if nodeData.owner == client:
+                nodeData = NodeData(None, None)
+                for c in self.clients:
+                    c.sendNodeUpdate(node, nodeData.toDict())
+                continue
+            playerNodes[node] = nodeData
+
+        for packet in self.packets:
+            if packet.owner == client:
+                continue
+            packets.append(packet)
+
+        self.clientData[client] = None
+        self.playerNodes = playerNodes
+        self.packets = packets
+
+        client.sendEndGame(self.currentPlacement)
+        self.currentPlacement -= 1
 
     def playerProtectArrived(self, nodeData, packet):
         # No owner of node.
@@ -604,11 +693,17 @@ class GameSession(protocol.Factory):
         if nodeData.owner != packet.owner:
             return
 
+        if packet.owner.money < self.protectCost:
+            return
+
+        packet.owner.money -= self.protectCost
+
         if nodeData.defense < 5:
             nodeData.defense += 1
 
         packet.owner.sendNodeUpdate(packet.destination,
                                     nodeData.toDict())
+        packet.owner.sendPlayerData(packet.owner)
 
     def playerPacketStopped(self, currentNode, packet):
         packet.owner.sendNodeUpdate(packet.currentNode,
@@ -624,7 +719,7 @@ class GameSession(protocol.Factory):
             self.playerConnectArrived(nodeData, packet)
         elif action == "hop" and currentNode is not None:
             if currentNode.owner != packet.owner:
-                packet.stop()
+                packet.owner.sendNodeUpdate(packet.currentNode, currentNode)
 
         packet.owner.sendPacketUpdate(packet)
 
@@ -670,6 +765,6 @@ def server_main(args):
     observer.start()
 
     logging.basicConfig(level=logging.DEBUG)
-    network, networkLayout = generate_complex_network(60)
+    network, networkLayout = generate_complex_network(40)
     reactor.listenTCP(9876, GameSession(network, networkLayout, scale=2000))
     reactor.run()

@@ -49,8 +49,9 @@ function Menu.new(x, y, title)
     self.highlighted = nil
     self.titlefont = love.graphics.newFont(18)
     self.itemfont = love.graphics.newFont(12)
-    self.titlecolor = {255, 255, 255}
-    self.highlightcolor = {255, 255, 255}
+    self.itemColor = {128, 128, 128}
+    self.itemHighlightColor = {255, 255, 255}
+    self.titleColor = {255, 255, 255}
     return self
 end
 
@@ -60,7 +61,7 @@ function Menu:draw(scene)
 
     if self.title then
         love.graphics.setFont(self.titlefont)
-        love.graphics.setColor(self.titlecolor)
+        love.graphics.setColor(self.titleColor)
         love.graphics.print(self.title, self.x, self.y + row * 30)
         row = row + self.titlefont:getHeight(self.title) + 4
     end
@@ -74,7 +75,7 @@ function Menu:draw(scene)
         local h = self.itemfont:getHeight(itemTitle)
 
         if item == self.highlighted then
-            love.graphics.setColor(self.highlightcolor)
+            love.graphics.setColor(self.itemHighlightColor)
         else
             love.graphics.setColor(item:getColor())
         end
@@ -104,6 +105,7 @@ end
 
 
 function Menu:addItem(title, callback, color)
+    if color == nil then color = self.itemColor end
     table.insert(self.items, {MenuItem.new(title, color), callback})
 
     self:clearShapeListeners()

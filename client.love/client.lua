@@ -18,7 +18,8 @@ local playerColors = {
     {0, 0, 255},
 }
 
-M._state = nil
+M._loggedIn = nil
+M._loginPending = false
 M._chatVisible = true
 M._playersVisible = true
 M._ready = false
@@ -26,13 +27,38 @@ M._name = nil
 M._modeIndex = 1
 M._colorIndex = 1
 M._changed = true
+M._gameEnding = nil
 
 function M:setName(name)
     self._name = name
 end
 
-function M:setState(state)
-    self._state = state
+function M:setLoggedIn(loggedIn)
+    self._loggedIn = loggedIn
+end
+
+function M:isLoggedIn()
+    return self._loggedIn
+end
+
+function M:setLoginPending(loginPending)
+    self._loginPending = loginPending
+end
+
+function M:isLoginPending()
+    return self._loginPending
+end
+
+function M:setGameEnding(gameEnding)
+    self._gameEnding = gameEnding
+end
+
+function M:isGameEnded()
+    return self._gameEnding ~= nil
+end
+
+function M:getGameEnding()
+    return self._gameEnding
 end
 
 function M:addChatEntry(user, text)
@@ -41,14 +67,6 @@ function M:addChatEntry(user, text)
     if #self.chatLog > self.chatLogLimit then
         table.remove(self.chatLog, #self.chatLog)
     end
-end
-
-function M:isEstablished()
-    if not network:isConnected() then
-        return false
-    end
-
-    return self._state == "established"
 end
 
 function M:isChatVisible()

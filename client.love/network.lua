@@ -92,13 +92,13 @@ function M:update(ds)
     if self._reconnect ~= nil then
         self._reconnect = self._reconnect - ds
 
-        if self._reconnect <= 0 then
-            self._reconnect = nil
-            print("Attempting to Reconnect")
-            self:connect(self._host, self._port)
+        if self._reconnect > 0 then
+            return
         end
 
-        return
+        self._reconnect = nil
+        print("Attempting to Reconnect")
+        self:connect(self._host, self._port)
     end
 
     local ok, body = self:receiveJson()

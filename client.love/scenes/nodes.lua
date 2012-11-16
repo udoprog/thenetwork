@@ -12,6 +12,7 @@ local S = Scene.new()
 
 S.cpu = 0
 S.cpuUsage = 0
+S.money = 0
 
 function S:load(onUpdate)
     self:clear()
@@ -75,6 +76,7 @@ end
 function S:setPlayerData(data)
     self.cpuUsage = data.cpuUsage
     self.cpu = data.cpu
+    self.money = data.money
 end
 
 function S:draw_foreground()
@@ -82,6 +84,7 @@ function S:draw_foreground()
     local screen_height = love.graphics.getHeight()
     graphics.fill_bar(10, -40, self.cpu, self.cpuUsage, 20, 10, 2)
     love.graphics.draw(self.images.cpu, 0, screen_height - 40)
+    love.graphics.print("$" .. tostring(self.money), 50, screen_height - 40)
 end
 
 return S

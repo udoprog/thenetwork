@@ -50,6 +50,7 @@ function Packet:draw(scene)
     love.graphics.line(p1.x, p1.y, p1.x + p2x, p1.y + p2y)
 end
 
+
 function Packet:updateData(packetData)
     self.state = packetData.state
     self.currentNode = packetData.currentNode

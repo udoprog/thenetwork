@@ -30,7 +30,19 @@ function ContextMenu.new(x, y, r)
     self:addShapeListener(shape.Rectangle.new(40, 30, -20, -50), self.buttonListener, 'x')
     self:addShapeListener(shape.Rectangle.new(40, 30, 15, -40), self.buttonListener, 'p')
     self:addShapeListener(shape.Rectangle.new(40, 30, 15, 0), self.buttonListener, 'c')
+    self:addShapeListener(shape.Circle.new(75), self.hideListener)
     return self
+end
+
+
+function ContextMenu:hideListener(action)
+    if action == 'mouseout' then
+        self:hide()
+    end
+
+    if action == 'mouseover' then
+        self:hide()
+    end
 end
 
 

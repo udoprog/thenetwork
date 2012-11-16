@@ -54,7 +54,7 @@ function Scene:update(ds)
         -- If a mouse state has already been checked.
         local stateChecked = true
 
-        for i=1, #self._keys do
+        for i=#self._keys, 1, -1 do
             local key = self._keys[i]
             local entityGroup = self._entities[key]
 
